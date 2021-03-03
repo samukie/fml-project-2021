@@ -8,7 +8,6 @@ from environment import BombeRLeWorld, GenericWorld
 from fallbacks import pygame, tqdm, LOADED_PYGAME
 from replay import ReplayWorld
 
-
 # Function to run the game logic in a separate thread
 def game_logic(world: GenericWorld, user_inputs, args):
     last_update = time()
@@ -20,7 +19,6 @@ def game_logic(world: GenericWorld, user_inputs, args):
         elif world.gui is not None and (now - last_update < args.update_interval):
             sleep(args.update_interval - (now - last_update))
             continue
-
         last_update = now
         if world.running:
             world.do_step(user_inputs.pop(0) if len(user_inputs) else 'WAIT')
@@ -29,7 +27,7 @@ def game_logic(world: GenericWorld, user_inputs, args):
 def main(args):
     parser = ArgumentParser()
 
-    subparsers = parser.add_subparsers(dest='command_name', required=True)
+    subparsers = parser.add_subparsers(dest='command_name') # , required=True)
 
     # Run arguments
     play_parser = subparsers.add_parser("play")
@@ -59,7 +57,7 @@ def main(args):
 
         # Video?
         sub.add_argument("--make-video", default=False, action="store_true",
-                         help="Make a video from the game")
+             help="Make a video from the game")
 
     args = parser.parse_args()
     if args.command_name == "replay":

@@ -4,7 +4,6 @@ from time import time
 import settings as s
 from fallbacks import pygame
 
-
 class Item(object):
     def __init__(self):
         pass

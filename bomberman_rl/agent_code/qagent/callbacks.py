@@ -11,7 +11,7 @@ def construct_table(feature_size, board_size):
     return q_table
 
 def get_minimum(current, targets, board_size):
-    if targets == []: 
+    if targets == []:
         return board_size+1
     else:
         return np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
@@ -62,7 +62,7 @@ def get_observation_and_action(self, game_state):
     invalid_actions = list(set(self.action_dict.values())-set(valid_actions))
     invalid_actions_indices = [inverted_actions[action] for action in invalid_actions]
     valid_action_values = {key:val for key, val in action_value_dict.items() if key not in invalid_actions_indices}
-    
+
     best_action = self.action_dict[max(valid_action_values, key=valid_action_values.get)]
 
     return best_action, observation

@@ -1,3 +1,6 @@
 [submodule "bomberman_rl"]
 	path = bomberman_rl
 	url = https://github.com/ukoethe/bomberman_rl
+[submodule "bomberman_rl/agent_code/dreamerv2/dv2"]
+	path = bomberman_rl/agent_code/dreamerv2/dv2
+	url = https://github.com/danijar/dreamerv2/
