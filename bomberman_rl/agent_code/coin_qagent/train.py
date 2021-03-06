@@ -54,8 +54,8 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     if old_game_state:
         #print('model ', self.model)
 
-        current_action, current_obs = get_observation_and_action(self, old_game_state)
-        next_action, next_obs= get_observation_and_action(self, new_game_state)
+        current_action, current_obs = get_action_and_observation(self, old_game_state)
+        next_action, next_obs= get_action_and_observation(self, new_game_state)
         inverted_actions = {v: k for k, v in self.action_dict.items()}
         current_action_index = inverted_actions[current_action]
         current_value = self.model[current_obs[0]][current_obs[1]][current_action_index]
@@ -67,10 +67,10 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             prev_dist =  get_minimum_distance(old_game_state['self'][3], old_game_state['coins'], self.board_size)
             curr_dist =  get_minimum_distance(new_game_state['self'][3], new_game_state['coins'], self.board_size)
             if curr_dist < prev_dist:
-                reward+=1
+                reward+=5
 
         updated_action_value = (1 - self.lr) * current_value + self.lr * \
-        (reward + self.discount * max_future_value)
+        (reward + self.discount * max_future_value - current_value)
 
         self.model[current_obs[0]][current_obs[1]][current_action_index] = updated_action_value
         #print("UPDATE!!!")
@@ -113,11 +113,7 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 10,
-        e.KILLED_OPPONENT: 0,
-        e.KILLED_SELF: -10,
-        e.GOT_KILLED:-10,
-        e.BOMB_DROPPED: 0
+        e.COIN_COLLECTED: 100,
     }
     reward_sum = 0
     for event in events:

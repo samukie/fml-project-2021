@@ -8,21 +8,17 @@ ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT']
 
 def construct_table(feature_size, board_size):
     # 8**17*17
-    q_table =  np.zeros((board_size+2, board_size+2, len(ACTIONS)))
+    q_table =  np.random.rand(board_size+2, board_size+2, len(ACTIONS))
     return q_table
 
 def get_minimum(current, targets, board_size):
+    #print(targets)
     if targets == []: 
-        return False
+        return -1
     else:
+        #print('argmin')
+        #print(np.argmin(np.sum(np.abs(np.subtract(targets, current)), axis=1)))
         return np.argmin(np.sum(np.abs(np.subtract(targets, current)), axis=1))
-    
-
-def get_minimum(current, targets, board_size):
-    if targets == []: 
-        return False
-    else:
-        return np.argmin(np.sum(np.abs(np.subtract(targets, current)), axis=1).min())
 
 def get_minimum_distance(current, targets, board_size):
     if targets == []: 
@@ -30,14 +26,18 @@ def get_minimum_distance(current, targets, board_size):
     else:
         return np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
 
-def get_observation_and_action(self, game_state):
+def get_action_and_observation(self, game_state):
+    
     arena = game_state['field']
     _, score, bombs_left, (x, y) = game_state['self']
     current = (x,y)
+    """
     bombs = game_state['bombs']
     bomb_xys = [xy for (xy, t) in bombs]
     others = [xy for (n, s, b, xy) in game_state['others']]
     coins = game_state['coins']
+    
+   
     bomb_map = np.ones(arena.shape) * 5
     for (xb, yb), t in bombs:
         for (i, j) in [(xb + h, yb) for h in range(-3, 4)] + [(xb, yb + h) for h in range(-3, 4)]:
@@ -58,12 +58,14 @@ def get_observation_and_action(self, game_state):
     if (x + 1, y) in valid_tiles: valid_actions.append('RIGHT')
     if (x, y - 1) in valid_tiles: valid_actions.append('UP')
     if (x, y + 1) in valid_tiles: valid_actions.append('DOWN')
-    if (x, y) in valid_tiles: valid_actions.append('WAIT')
     # We do not disallow BOMB actions
+    """
     # observation
+    valid_actions = ['LEFT', 'RIGHT', 'UP', 'DOWN'] 
+
     min_coin_index =  get_minimum(current, game_state['coins'], self.board_size)
-    if min_coin_index == False:
-        best_action = np.random.choice(ACTIONS, 1)
+    if min_coin_index == -1 or np.random.randint(60,70)==69:
+        best_action = np.random.choice(ACTIONS, 1)[0]
         observation = [18,18]
     else: 
         min_coin = game_state['coins'][min_coin_index]
@@ -76,7 +78,7 @@ def get_observation_and_action(self, game_state):
         invalid_actions_indices = [inverted_actions[action] for action in invalid_actions]
         valid_action_values = {key:val for key, val in action_value_dict.items() if key not in invalid_actions_indices}
         best_action = self.action_dict[max(valid_action_values, key=valid_action_values.get)]
-    return best_action[0], observation
+    return best_action, observation
 
 
 def setup(self):
@@ -124,7 +126,8 @@ def act(self, game_state: dict) -> str:
     :param game_state: The dictionary that describes everything on the board.
     :return: The action to take as a string.
     """
-    action, _ = get_observation_and_action(self, game_state)
+    action, _ = get_action_and_observation(self, game_state)
+    #print('TAKE IT ', action)
     return action
 
 
