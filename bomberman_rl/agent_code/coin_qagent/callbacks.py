@@ -4,7 +4,7 @@ import random
 import operator
 import numpy as np
 
-ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT']
+ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
 
 def construct_table(feature_size, board_size):
     # 8**17*17
@@ -16,8 +16,6 @@ def get_minimum(current, targets, board_size):
     if targets == []: 
         return -1
     else:
-        #print('argmin')
-        #print(np.argmin(np.sum(np.abs(np.subtract(targets, current)), axis=1)))
         return np.argmin(np.sum(np.abs(np.subtract(targets, current)), axis=1))
 
 def get_minimum_distance(current, targets, board_size):
@@ -62,7 +60,6 @@ def get_action_and_observation(self, game_state):
     """
     # observation
     valid_actions = ['LEFT', 'RIGHT', 'UP', 'DOWN'] 
-
     min_coin_index =  get_minimum(current, game_state['coins'], self.board_size)
     if min_coin_index == -1 or np.random.randint(60,70)==69:
         best_action = np.random.choice(ACTIONS, 1)[0]
@@ -71,13 +68,7 @@ def get_action_and_observation(self, game_state):
         min_coin = game_state['coins'][min_coin_index]
         observation = [x-min_coin[0],y-min_coin[1]]
         action_values = self.model[observation[0]][observation[1]]
-        action_value_dict = {index:action for index, action in enumerate(action_values)}
-        self.logger.debug(f'Valid actions: {valid_actions}')
-        inverted_actions = {v: k for k, v in self.action_dict.items()}
-        invalid_actions = list(set(self.action_dict.values())-set(valid_actions))
-        invalid_actions_indices = [inverted_actions[action] for action in invalid_actions]
-        valid_action_values = {key:val for key, val in action_value_dict.items() if key not in invalid_actions_indices}
-        best_action = self.action_dict[max(valid_action_values, key=valid_action_values.get)]
+        best_action = self.action_dict[np.argmax(action_values)]
     return best_action, observation
 
 
@@ -108,13 +99,13 @@ def setup(self):
             self.model = pickle.load(file)
             print(self.model)
             print('loaded')
+            print(self.model.shape)
     self.board_size = 17
     self.action_dict = {
         0:'LEFT',
         1:'RIGHT',
         2:'UP',
         3:'DOWN',
-        4:'WAIT',
     }
 
 def act(self, game_state: dict) -> str:
