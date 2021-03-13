@@ -29,8 +29,8 @@ def setup_training(self):
     # Example: Setup an array that will note transition tuples
     # (s, a, r, s')
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
-    self.lr = 0.2
-    self.discount = 0.95
+    self.lr = 0.3
+    self.discount = 0.85
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -58,8 +58,12 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         next_action, next_obs= get_action_and_observation(self, new_game_state)
         inverted_actions = {v: k for k, v in self.action_dict.items()}
         current_action_index = inverted_actions[current_action]
-        current_value = self.model[current_obs[0]][current_obs[1]][current_action_index]
-        max_future_value = np.max(self.model[next_obs[0]][next_obs[1]])
+
+        current_surrounding = get_environment(old_game_state)
+        future_surrounding = get_environment(new_game_state)
+        
+        current_value = self.model[current_obs[0]][current_obs[1]][current_surrounding][current_action_index]
+        max_future_value = np.max(self.model[next_obs[0]][next_obs[1]][future_surrounding])
         reward = reward_from_events(self, events)
 
         # additional_reward 
@@ -67,7 +71,9 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             prev_dist =  get_minimum_distance(old_game_state['self'][3], old_game_state['coins'], self.board_size)
             curr_dist =  get_minimum_distance(new_game_state['self'][3], new_game_state['coins'], self.board_size)
             if curr_dist < prev_dist:
-                reward+=5
+                reward+=20
+            elif curr_dist > prev_dist:
+                reward-=20
 
         updated_action_value = (1 - self.lr) * current_value + self.lr * \
         (reward + self.discount * max_future_value - current_value)
@@ -114,6 +120,7 @@ def reward_from_events(self, events: List[str]) -> int:
     """
     game_rewards = {
         e.COIN_COLLECTED: 100,
+        e.INVALID_ACTION: -50
     }
     reward_sum = 0
     for event in events:

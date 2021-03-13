@@ -7,8 +7,7 @@ import numpy as np
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
 
 def construct_table(feature_size, board_size):
-    # 8**17*17
-    q_table =  np.random.rand(board_size+2, board_size+2, len(ACTIONS))
+    q_table =  np.random.rand(board_size+2, board_size+2, 16, len(ACTIONS))
     return q_table
 
 def get_minimum(current, targets, board_size):
@@ -24,41 +23,29 @@ def get_minimum_distance(current, targets, board_size):
     else:
         return np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
 
+def get_environment(game_state):
+    _, _, _, (x, y) = game_state['self']
+    arena = game_state['field']
+    directions = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    binary = ''
+    for index, direction in enumerate(directions): 
+        if arena[directions[index]] == 0:
+            binary += '1'
+        else: 
+            binary += '0'
+    to_decimal = 0 
+    for index, digit in enumerate(binary[len(binary)::-1]):
+        to_decimal += int(digit)*2**(index)
+    return to_decimal
+
 def get_action_and_observation(self, game_state):
     
     arena = game_state['field']
     _, score, bombs_left, (x, y) = game_state['self']
     current = (x,y)
-    """
-    bombs = game_state['bombs']
-    bomb_xys = [xy for (xy, t) in bombs]
-    others = [xy for (n, s, b, xy) in game_state['others']]
-    coins = game_state['coins']
-    
-   
-    bomb_map = np.ones(arena.shape) * 5
-    for (xb, yb), t in bombs:
-        for (i, j) in [(xb + h, yb) for h in range(-3, 4)] + [(xb, yb + h) for h in range(-3, 4)]:
-            if (0 < i < bomb_map.shape[0]) and (0 < j < bomb_map.shape[1]):
-                bomb_map[i, j] = min(bomb_map[i, j], t)
-
-    # Check which moves make sense at all
-    directions = [(x, y), (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-    valid_tiles, valid_actions = [], []
-    for d in directions:
-        if ((arena[d] == 0) and
-                (game_state['explosion_map'][d] <= 1) and
-                (bomb_map[d] > 0) and
-                (not d in others) and
-                (not d in bomb_xys)):
-            valid_tiles.append(d)
-    if (x - 1, y) in valid_tiles: valid_actions.append('LEFT')
-    if (x + 1, y) in valid_tiles: valid_actions.append('RIGHT')
-    if (x, y - 1) in valid_tiles: valid_actions.append('UP')
-    if (x, y + 1) in valid_tiles: valid_actions.append('DOWN')
-    # We do not disallow BOMB actions
-    """
     # observation
+
+    surrounding = get_environment(game_state)
     valid_actions = ['LEFT', 'RIGHT', 'UP', 'DOWN'] 
     min_coin_index =  get_minimum(current, game_state['coins'], self.board_size)
     if min_coin_index == -1 or np.random.randint(60,70)==69:
@@ -67,7 +54,7 @@ def get_action_and_observation(self, game_state):
     else: 
         min_coin = game_state['coins'][min_coin_index]
         observation = [x-min_coin[0],y-min_coin[1]]
-        action_values = self.model[observation[0]][observation[1]]
+        action_values = self.model[observation[0]][observation[1]][surrounding]
         best_action = self.action_dict[np.argmax(action_values)]
     return best_action, observation
 
