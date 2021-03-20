@@ -55,7 +55,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         #print('model ', self.model)
 
         current_action, current_obs = get_action_and_observation(self, old_game_state)
-        next_action, next_obs= get_action_and_observation(self, new_game_state)
+        next_action, next_obs = get_action_and_observation(self, new_game_state)
         inverted_actions = {v: k for k, v in self.action_dict.items()}
         current_action_index = inverted_actions[current_action]
 
