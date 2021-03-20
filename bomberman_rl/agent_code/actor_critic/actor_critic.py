@@ -9,8 +9,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 
-MAX_REWARD = 1e5 # ??? set this
-seed = 543
+
 
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
 
@@ -77,6 +76,10 @@ def update(model, optimizer):
 
     Training code. 
     Calculates actor and critic loss and performs backprop.
+
+    For meaning of "advantage", "reward", "value", 
+    see "Back to Baselines" section of
+    https://towardsdatascience.com/understanding-actor-critic-methods-931b97b6df3f
     """
 
     R = 0

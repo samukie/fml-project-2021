@@ -9,7 +9,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
+
 from .actor_critic import ActorCritic
+
+torch.seed(4269420)
 
 MODELS = "models/"
 
@@ -107,7 +110,7 @@ def setup(self):
             num_states=self.num_features
             num_actions=self.num_actions
             gamma=0.99,
-        )
+        42)
 
         self.logger.info("Successfully set up model:")
         self.logger.info(self.model)
