@@ -12,7 +12,7 @@ from torch.distributions import Categorical
 
 from .actor_critic import ActorCritic
 
-torch.manual_seed(4269420)
+torch.seed(4269420)
 
 MODELS = "models/"
 
@@ -33,7 +33,7 @@ def get_minimum_distance(current, targets, board_size):
         return np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
 
 
-def get_features(namespace, game_state):
+def get_features(game_state):
     # ------------------ FEATURE ENGINEERING HERE ---------------------
 
     # 1st feat: 4 neighboring fields empty or not
@@ -57,18 +57,17 @@ def get_features(namespace, game_state):
     # 2nd feats: nearest x, y coins
 
     # observation
+    arena = game_state['field']
+    _, score, bombs_left, (x, y) = game_state['self']
     current = (x,y)
 
-    min_coin_index =  get_minimum(current, game_state['coins'], namespace.board_size)
+    min_coin_index =  get_minimum(current, game_state['coins'], self.board_size)
+    min_coin = game_state['coins'][min_coin_index]
 
-    if min_coin_index == -1:
-        feat2 = np.array([10000, 10000])
-    else:
-        min_coin = game_state['coins'][min_coin_index]
-        feat2 = np.array([x-min_coin[0], y-min_coin[1]])
+    feat2 = np.numpy([x-min_coin[0], y-min_coin[1]])
 
     features = np.concatenate([feat1, feat2])
-    assert features.shape[0] == namespace.num_features, f"Correct feature size: {features.shape[0]}, instead of {namespace.num_features}"
+    assert features.shape[0] == self.num_features, f"Correct feature size: {features.shape[0]}, instead of {self.num_features}"
     return features
 
 def setup(self):
@@ -99,7 +98,7 @@ def setup(self):
         # 4:'BOMB', # disallow these for coin agent
         # 5:'WAIT',
     }
-    self.num_features = 3 # determine by looking at get_features()
+    self.num_features = 6 # determine by looking at get_features()
     self.num_actions = 1 # model outputs int to index action_dict
 
     self.model_path = MODELS+"my-saved-model.pt"
@@ -108,8 +107,8 @@ def setup(self):
         self.logger.info("Setting up model from scratch.")
 
         self.model = ActorCritic(
-            num_states=self.num_features,
-            num_actions=self.num_actions,
+            num_states=self.num_features
+            num_actions=self.num_actions
             gamma=0.99,
         )
 
@@ -139,9 +138,9 @@ def act(self, game_state: dict) -> str:
     :param game_state: The dictionary that describes everything on the board.
     :return action_str: The action to take as a string.
     """
-    features = get_features(self, game_state)
+    features = get_features(game_state)
     
-    action = self.model.select_action(features)
+    action = self.model.select_action(observation)
 
     action_str = self.action_dict[action]
 
