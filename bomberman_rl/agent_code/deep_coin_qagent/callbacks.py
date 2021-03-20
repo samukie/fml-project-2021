@@ -3,68 +3,65 @@ import pickle
 import random
 import operator
 import numpy as np
+from .DQN import DQNAgent
 
-ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT', 'WAIT']
-
-def construct_table(feature_size, board_size):
-    # 8**17*17
-    q_table =  np.random.rand(board_size+1, board_size+1 len(ACTIONS))
-    return q_table
+ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
 
 def get_minimum(current, targets, board_size):
+    #print(targets)
     if targets == []: 
-        return board_size+1
+        return -1
     else:
-        return np.sum(np.abs(np.subtract(targets, current)), axis=1).min(), \
-            np.argmin(np.sum(np.abs(np.subtract(targets, current)), axis=1))
+        return np.argmin(np.sum(np.abs(np.subtract(targets, current)), axis=1))
 
-def get_observation_and_action(self, game_state):
+def get_minimum_distance(current, targets, board_size):
+    if targets == []: 
+        return False
+    else:
+        return np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
+
+def get_environment(game_state):
+    _, _, _, (x, y) = game_state['self']
+    arena = game_state['field']
+    directions = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    binary = ''
+    for index, direction in enumerate(directions): 
+        if arena[directions[index]] == 0:
+            binary += '1'
+        else: 
+            binary += '0'
+    to_decimal = 0 
+    for index, digit in enumerate(binary[len(binary)::-1]):
+        to_decimal += int(digit)*2**(index)
+    return to_decimal
+
+def get_coin_representation(coin_coordinate):
+    decimal = coin_coordinate[0]*19**0 + coin_coordinate[1]*19**1
+    return decimal
+
+def get_action_and_observation(self, game_state):
+    
     arena = game_state['field']
     _, score, bombs_left, (x, y) = game_state['self']
     current = (x,y)
-
-    bombs = game_state['bombs']
-    bomb_xys = [xy for (xy, t) in bombs]
-    others = [xy for (n, s, b, xy) in game_state['others']]
-    coins = game_state['coins']
-    bomb_map = np.ones(arena.shape) * 5
-    for (xb, yb), t in bombs:
-        for (i, j) in [(xb + h, yb) for h in range(-3, 4)] + [(xb, yb + h) for h in range(-3, 4)]:
-            if (0 < i < bomb_map.shape[0]) and (0 < j < bomb_map.shape[1]):
-                bomb_map[i, j] = min(bomb_map[i, j], t)
-
-    # Check which moves make sense at all
-    directions = [(x, y), (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-    valid_tiles, valid_actions = [], []
-    for d in directions:
-        if ((arena[d] == 0) and
-                (game_state['explosion_map'][d] <= 1) and
-                (bomb_map[d] > 0) and
-                (not d in others) and
-                (not d in bomb_xys)):
-            valid_tiles.append(d)
-    if (x - 1, y) in valid_tiles: valid_actions.append('LEFT')
-    if (x + 1, y) in valid_tiles: valid_actions.append('RIGHT')
-    if (x, y - 1) in valid_tiles: valid_actions.append('UP')
-    if (x, y + 1) in valid_tiles: valid_actions.append('DOWN')
-    if (x, y) in valid_tiles: valid_actions.append('WAIT')
-    # We do disallow BOMB actions
     # observation
-    min_coin, min_coin =  get_minimum(current, game_state['coins'], self.board_size)
-    observation = [x-min_coin[0], x-min_coin[1]]
 
-    action_values = self.model[min_bomb][min_player][min_coin]
-    action_value_dict = {index:action for index, action in enumerate(action_values)}
-    self.logger.debug(f'Valid actions: {valid_actions}')
-
-    inverted_actions = {v: k for k, v in self.action_dict.items()}
-    invalid_actions = list(set(self.action_dict.values())-set(valid_actions))
-    invalid_actions_indices = [inverted_actions[action] for action in invalid_actions]
-    valid_action_values = {key:val for key, val in action_value_dict.items() if key not in invalid_actions_indices}
+    surrounding = get_environment(game_state)
+    valid_actions = ['LEFT', 'RIGHT', 'UP', 'DOWN'] 
+    min_coin_index =  get_minimum(current, game_state['coins'], self.board_size)
     
-    best_action = self.action_dict[max(valid_action_values, key=valid_action_values.get)]
+    if np.random.random() > self.epsilon:
+        # Get action from Q table
+        min_coin = game_state['coins'][min_coin_index]
+        coin_coordinate = (x-min_coin[0],y-min_coin[1])
+        coin_decimal = get_coin_representation(coin_coordinate)
+        best_action = np.argmax(self.model.get_qs([1,coin_decimal, surrounding]))
+    else:
+        # Get random action
+        coin_decimal = 361
+        best_action = np.random.randint(0, len(ACTIONS))
 
-    return best_action, observation
+    return best_action, [coin_decimal, surrounding]
 
 
 def setup(self):
@@ -86,12 +83,13 @@ def setup(self):
         self.logger.info("Setting up model from scratch.")
         #weights = np.random.rand(len(ACTIONS))
         #self.model = weights / weights.sum()
-        self.model = construct_table(3,17)
+        self.model = DQNAgent()
         print('contructed')
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
-            self.model = pickle.load(file)
+            #self.model = pickle.load(file)
+            self.model = keras.models.load_model("my-saved-model.pt")
             print(self.model)
             print('loaded')
     self.board_size = 17
@@ -100,8 +98,6 @@ def setup(self):
         1:'RIGHT',
         2:'UP',
         3:'DOWN',
-        4:'WAIT',
-        5:'BOMB'
     }
 
 def act(self, game_state: dict) -> str:
@@ -113,7 +109,7 @@ def act(self, game_state: dict) -> str:
     :param game_state: The dictionary that describes everything on the board.
     :return: The action to take as a string.
     """
-    action, _ = get_observation_and_action(self, game_state)
+    action, _ = get_action_and_observation(self, game_state)
     return action
 
 

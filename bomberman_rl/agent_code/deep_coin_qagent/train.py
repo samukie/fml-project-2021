@@ -3,6 +3,8 @@ import random
 from collections import namedtuple, deque
 from typing import List
 
+from .DQN import *
+
 import events as e
 from .callbacks import *
 
@@ -29,9 +31,37 @@ def setup_training(self):
     # Example: Setup an array that will note transition tuples
     # (s, a, r, s')
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
-    self.lr = 0.5
-    self.discount = 0.5
+    self.lr = 0.3
+    self.discount = 0.85
 
+    DISCOUNT = 0.99
+    REPLAY_MEMORY_SIZE = 50_000  # How many last steps to keep for model training
+    MIN_REPLAY_MEMORY_SIZE = 1_000  # Minimum number of steps in a memory to start training
+    MINIBATCH_SIZE = 64  # How many steps (samples) to use for training
+    UPDATE_TARGET_EVERY = 5  # Terminal states (end of episodes)
+    MODEL_NAME = '2x256'
+    MIN_REWARD = -200  # For model save
+    MEMORY_FRACTION = 0.20
+
+    # Environment settings
+    EPISODES = 20_000
+
+    # Exploration settings
+    self.epsilon = 1  # not a constant, going to be decayed
+    EPSILON_DECAY = 0.99975
+    MIN_EPSILON = 0.001
+
+    #  Stats settings
+    AGGREGATE_STATS_EVERY = 50  # episodes
+    SHOW_PREVIEW = False
+
+    # For stats
+    ep_rewards = [-200]
+
+    # For more repetitive results
+    random.seed(1)
+    np.random.seed(1)
+    tf.random.set_seed(1)
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
@@ -52,20 +82,38 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     """
 
     if old_game_state:
-        current_action, current_obs = get_observation_and_action(self, old_game_state)
-        next_action, next_obs= get_observation_and_action(self, new_game_state)
+        #print('model ', self.model)
+        done = False 
 
-        inverted_actions = {v: k for k, v in self.action_dict.items()}
-        current_action_index = inverted_actions[current_action]
-        current_value = self.model[current_obs[0]][current_obs[1]][current_obs[2]][current_action_index]
-        max_future_value = np.max(self.model[next_obs[0]][next_obs[0]][next_obs[0]])
+        current_action, current_obs = get_action_and_observation(self, old_game_state)
+        next_action, next_obs= get_action_and_observation(self, new_game_state)
+
+        print('curr', current_action)
+
+        #inverted_actions = {v: k for k, v in self.action_dict.items()}
+        #current_action_index = inverted_actions[current_action]
+
+        current_surrounding = get_environment(old_game_state)
+        future_surrounding = get_environment(new_game_state)
+        
+        #current_value = self.model[current_obs[0]][current_obs[1]][current_surrounding][current_action_index]
+        #max_future_value = np.max(self.model[next_obs[0]][next_obs[1]][future_surrounding])
 
         reward = reward_from_events(self, events)
 
-        updated_action_value = (1 - self.lr) * current_value + self.lr * \
-        (reward + self.discount * max_future_value)
 
-        self.model[current_obs[0]][current_obs[1]][current_obs[2]][current_action_index] = updated_action_value
+        # additional_reward 
+        if old_game_state['coins']!=[] and new_game_state['coins']!=[]:
+            prev_dist =  get_minimum_distance(old_game_state['self'][3], old_game_state['coins'], self.board_size)
+            curr_dist =  get_minimum_distance(new_game_state['self'][3], new_game_state['coins'], self.board_size)
+            if curr_dist < prev_dist:
+                reward+=20
+            elif curr_dist > prev_dist:
+                reward-=20
+
+        self.model.update_replay_memory((current_action, current_obs, reward, next_obs, done))
+        self.model.train(done)
+        #print("UPDATE!!!")
 
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
 
@@ -93,8 +141,10 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
 
     # Store the model
-    with open("my-saved-model.pt", "wb") as file:
-        pickle.dump(self.model, file)
+    #self.model.model.save(f'my-saved-model.pt')
+
+    #with open("my-saved-model.pt", "wb") as file:
+    #    pickle.dump(self.model, file)
 
 
 def reward_from_events(self, events: List[str]) -> int:
@@ -105,11 +155,8 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 2,
-        e.KILLED_OPPONENT: 5,
-        e.KILLED_SELF: -10,
-        e.GOT_KILLED:-5,
-        e.BOMB_DROPPED: -1
+        e.COIN_COLLECTED: 100,
+        e.INVALID_ACTION: -50
     }
     reward_sum = 0
     for event in events:
