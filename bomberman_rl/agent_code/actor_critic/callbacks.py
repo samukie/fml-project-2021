@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 
-from .actor_critic import ActorCritic
+from .actor_critic import *
 
 torch.manual_seed(4269420)
 
@@ -35,42 +35,74 @@ def get_minimum_distance(current, targets, board_size):
 
 def get_features(namespace, game_state):
     # ------------------ FEATURE ENGINEERING HERE ---------------------
-    assert False, game_state
+    # assert False, game_state
 
     # 1st feat: 4 neighboring fields empty or not
 
-    _, _, _, (x, y) = game_state['self']
-    arena = game_state['field']
-    directions = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-    binary = ''
-    for index, direction in enumerate(directions): 
-        if arena[directions[index]] == 0:
-            binary += '1'
-        else: 
-            binary += '0'
+    # _, _, _, (x, y) = game_state['self']
+    # arena = game_state['field']
+    # directions = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    # binary = ''
+    # for index, direction in enumerate(directions): 
+    #     if arena[directions[index]] == 0:
+    #         binary += '1'
+    #     else: 
+    #         binary += '0'
 
-    to_decimal = 0 
-    for index, digit in enumerate(binary[len(binary)::-1]):
-        to_decimal += int(digit)*2**(index)
+    # to_decimal = 0 
+    # for index, digit in enumerate(binary[len(binary)::-1]):
+    #     to_decimal += int(digit)*2**(index)
 
-    feat1 = np.array([to_decimal])
+    # feat1 = np.array([to_decimal])
 
-    # 2nd feats: nearest x, y coins
+    # # 2nd feats: nearest x, y coins
 
-    # observation
-    current = (x,y)
+    # # observation
+    # current = (x,y)
 
-    min_coin_index =  get_minimum(current, game_state['coins'], namespace.board_size)
+    # min_coin_index =  get_minimum(current, game_state['coins'], namespace.board_size)
 
-    if min_coin_index == -1:
-        feat2 = np.array([10000, 10000])
-    else:
-        min_coin = game_state['coins'][min_coin_index]
-        feat2 = np.array([x-min_coin[0], y-min_coin[1]])
+    # if min_coin_index == -1:
+    #     feat2 = np.array([10000, 10000])
+    # else:
+    #     min_coin = game_state['coins'][min_coin_index]
+    #     feat2 = np.array([x-min_coin[0], y-min_coin[1]])
+    # features = np.concatenate([feat1, feat2])
 
-    features = np.concatenate([feat1, feat2])
+    conv_feats = []
+    conv_feats += [game_state["field"]]
+    conv_feats += [game_state["explosion_map"]]
+    
+    coin_feat = np.zeros((namespace.board_size, namespace.board_size))
+    for coin in game_state["coins"]:
+        coin_feat[coin[0], coin[1]] = 1
+    conv_feats += [coin_feat]
+
+    bomb_feat = np.zeros((namespace.board_size, namespace.board_size))
+    for bomb in game_state["bombs"]:
+        bomb_feat[bomb[0], bomb[1]] = 1
+    conv_feats += [bomb_feat]
+
+    agents_feat = np.zeros((namespace.board_size, namespace.board_size))
+    scores_feat = np.zeros((namespace.board_size, namespace.board_size))
+
+    agent_idx = 7
+    my_agent_pos = game_state["self"][-1]
+    agents_feat[my_agent_pos[0], my_agent_pos[1]] = agent_idx 
+    scores_feat[my_agent_pos[0], my_agent_pos[1]] = game_state["self"][1] 
+
+    for (other_score, other_bomb, other_pos) in [other[1:] for other in game_state["others"]]:
+        agent_idx += 2
+        agents_feat[other_pos[0], other_pos[1]] = agent_idx
+        scores_feat[other_pos[0], other_pos[1]] = other_score
+
+    conv_feats += [agents_feat]
+    conv_feats += [scores_feat]
+
+    features = np.concatenate([feat[np.newaxis,:,:] for feat in conv_feats], axis=0)
     assert features.shape[0] == namespace.num_features, f"Correct feature size: {features.shape[0]}, instead of {namespace.num_features}"
-    return features
+
+    return np.expand_dims(features, 0)
 
 def setup(self):
     """
@@ -100,7 +132,7 @@ def setup(self):
         # 4:'BOMB', # disallow these for coin agent
         # 5:'WAIT',
     }
-    self.num_features = 3 # determine by looking at get_features()
+    self.num_features = 6 # determine by looking at get_features()
     self.num_actions = 1 # model outputs int to index action_dict
 
     self.model_path = MODELS+"my-saved-model.pt"
@@ -108,10 +140,28 @@ def setup(self):
     if self.train or not os.path.isfile(self.model_path):
         self.logger.info("Setting up model from scratch.")
 
-        self.model = ActorCritic(
+        # self.model = ActorCriticLinear(
+        #     num_states=self.num_features,
+        #     num_actions=self.num_actions,
+        #     gamma=0.99,
+        # )
+    
+        # self.model = ActorCriticConv(
+        #     in_channels=self.num_features,
+        #     board_size=self.board_size,
+        #     num_actions=self.num_actions,
+        #     gamma=0.99,
+        # )
+
+        num_heads = 6
+
+        self.model = ActorCriticTransformer(
+            board_size=self.board_size,
             num_states=self.num_features,
             num_actions=self.num_actions,
-            gamma=0.99,
+            hidden_dim=num_heads*self.board_size,
+            num_heads=num_heads,
+            mlp_dim=self.board_size*num_heads*2,
         )
 
         self.logger.info("Successfully set up model:")

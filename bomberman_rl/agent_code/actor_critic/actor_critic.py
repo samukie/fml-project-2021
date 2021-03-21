@@ -9,6 +9,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 
+from vit_pytorch import ViT
 
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
 
@@ -19,8 +20,7 @@ class ActorCritic(nn.Module):
     """
     def __init__(
         self,
-        num_states,
-        num_actions, 
+        num_actions=1, 
         gamma=.99,
         **kwargs,
         ):
@@ -31,19 +31,37 @@ class ActorCritic(nn.Module):
         self.episode_reward = 0
         self.episode_rewards = []
         self.gamma = gamma
+    
+    def encode(self, x):
+        try:
+            return self._encoder(x)
+        except AttributeError:
+            raise NotImplementedError(f"ActorCritic must implement _encoder")
+    
+    def actor(self, x):
+        try:
+            return self._action_head(x)
+        except AttributeError:
+            raise NotImplementedError(f"ActorCritic must implement _action_head")
+    
+    def critic(self, x):
+        try:
+            return self._value_head(x)
+        except AttributeError:
+            raise NotImplementedError(f"ActorCritic must implement _value_head")
 
     def forward(self, x):
         """
         forward of both actor and critic
         """
-        x = self.encoder(x)
+        x = self.encode(x)
 
         # actor: choses action to take from state s_t 
         # by returning probability of each action
-        action_prob = self.action_head(x)
+        action_prob = self.actor(x)
 
         # critic: evaluates being in the state s_t
-        state_values = self.value_head(x)
+        state_values = self.critic(x)
 
         # return values for both actor and critic as a tuple of 2 values:
         # 1. a list with the probability of each action over the action space
@@ -80,15 +98,15 @@ class ActorCritic(nn.Module):
         """
 
         R = 0
-        saved_actions = model.saved_actions
+        saved_actions = self.saved_actions
         policy_losses = [] # list to save actor (policy) loss
         value_losses = [] # list to save critic (value) loss
         returns = [] # list to save the true values
 
         # calculate the true value using episode_rewards returned from the environment
-        for r in model.episode_rewards[::-1]:
+        for r in self.episode_rewards[::-1]:
             # calculate the discounted value
-            R = r + model.gamma * R
+            R = r + self.gamma * R
             returns.insert(0, R)
 
         returns = torch.tensor(returns)
@@ -114,9 +132,9 @@ class ActorCritic(nn.Module):
         optimizer.step()
 
         # reset episode_rewards and action buffer
-        model.episode_reward = 0
-        del model.episode_rewards[:]
-        del model.saved_actions[:]
+        self.episode_reward = 0
+        del self.episode_rewards[:]
+        del self.saved_actions[:]
 
 
 class ActorCriticLinear(ActorCritic):
@@ -126,7 +144,7 @@ class ActorCriticLinear(ActorCritic):
     def __init__(
         self,
         num_states,
-        num_actions, 
+        num_actions=1, 
         state_dim=64,
         actor_hiddens=[128,32],
         critic_hiddens=[128, 32, 4],
@@ -135,13 +153,19 @@ class ActorCriticLinear(ActorCritic):
         **kwargs
         ):
 
-        super(ActorCriticLinear, self).__init__()
+        super(ActorCriticLinear, self).__init__(
+            num_states,
+            num_actions, 
+            gamma=gamma,
+            **kwargs,
+        )
+
 
         self.state_dim = state_dim # hidden state dimension which is input to A and to C
 
         # --------------- ENCODER --------------
 
-        self.encoder = nn.Sequential(
+        self._encoder = nn.Sequential(
             nn.Linear(num_states, state_dim),
             nn.ReLU6()
         )
@@ -164,7 +188,7 @@ class ActorCriticLinear(ActorCritic):
             nn.Softmax(dim=-1)
         ]
 
-        self.action_head = nn.Sequential(*actor_layers)
+        self._action_head = nn.Sequential(*actor_layers)
 
         # --------------- CRITIC -----------------
 
@@ -182,7 +206,8 @@ class ActorCriticLinear(ActorCritic):
             nn.Linear(critic_prev_hidden, 1),
         ]
 
-        self.value_head = nn.Sequential(*critic_layers)
+        self._value_head = nn.Sequential(*critic_layers)
+
 
 
 class ActorCriticConv(ActorCritic):
@@ -194,7 +219,6 @@ class ActorCriticConv(ActorCritic):
         board_size, # e.g. 17
         num_actions, 
         in_channels,
-        state_dim=64,
         actor_channels=[7, 5, 3],
         critic_channels=[7, 5, 5],
         dropout=.2,
@@ -202,14 +226,15 @@ class ActorCriticConv(ActorCritic):
         **kwargs
         ):
 
-        super(ActorCriticConv, self).__init__()
+        super(ActorCriticConv, self).__init__(
+        )
 
         state_dim = in_channels # hidden channels which are input to A and to C
 
         # --------------- ENCODER --------------
 
-        self.encoder = nn.Sequential(
-            nn.Conv2d(in_channels, state_dim),
+        self._encoder = nn.Sequential(
+            nn.Conv2d(in_channels, state_dim, kernel_size=1),
             nn.ReLU6()
         )
 
@@ -232,7 +257,7 @@ class ActorCriticConv(ActorCritic):
             nn.Softmax(dim=-1)
         ]
 
-        self.action_head = nn.Sequential(*actor_layers)
+        self._action_head = nn.Sequential(*actor_layers)
 
         # --------------- CRITIC -----------------
 
@@ -250,6 +275,76 @@ class ActorCriticConv(ActorCritic):
             nn.Linear(critic_prev_channel, 1),
         ]
 
-        self.value_head = nn.Sequential(*critic_layers)
+        self._value_head = nn.Sequential(*critic_layers)
+
+
+class ActorCriticTransformer(ActorCritic):
+    """
+    implements both actor and critic in one model, conventionally
+    """
+    def __init__(
+        self,
+        board_size, # e.g. 17
+        num_states,
+        num_actions, 
+        hidden_dim,
+        num_heads,
+        mlp_dim,
+        num_layers=3,
+        critic_hiddens=[17*4,17*2,9],
+        dropout=.1,
+        gamma=.99,
+        **kwargs
+        ):
+
+        super(ActorCriticTransformer, self).__init__(
+            num_actions=num_actions,
+            gamma=gamma,
+        )
+
+
+        # --------------- ENCODER --------------
+
+        self._encoder = nn.Identity()
+
+        # --------------- ACTOR -----------------
+        
+
+        self._action_head = ViT(
+            image_size = board_size,
+            channels=num_states,
+            patch_size = 1,
+            num_classes = num_actions,
+            dim = hidden_dim,
+            depth = num_layers,
+            heads = num_heads,
+            mlp_dim = mlp_dim,
+            dropout = dropout,
+            emb_dropout = dropout,
+        )
+
+
+        # --------------- CRITIC -----------------
+
+        critic_layers = [
+            nn.Flatten(2),
+        ]
+        critic_prev_hidden = board_size **2
+
+        for critic_hidden in critic_hiddens:
+            critic_layers += [
+                nn.Linear(critic_prev_hidden, critic_hidden),
+                nn.ReLU6(),
+                nn.Dropout(p=dropout)
+            ]
+            critic_prev_hidden = critic_hidden
+
+        critic_layers += [
+            nn.Flatten(1),
+            nn.Linear(critic_prev_hidden*num_states, 1),
+        ]
+
+        self._value_head = nn.Sequential(*critic_layers)
+
 
 
