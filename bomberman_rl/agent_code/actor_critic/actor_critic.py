@@ -13,8 +13,6 @@ from torch.distributions import Categorical
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
 
 
-
-
 class ActorCritic(nn.Module):
     """
     implements both actor and critic in one model
@@ -23,61 +21,12 @@ class ActorCritic(nn.Module):
         self,
         num_states,
         num_actions, 
-        state_dim=64,
-        actor_hiddens=[128,32],
-        critic_hiddens=[128],
-        dropout=.2,
-        gamma=.99
+        gamma=.99,
+        **kwargs,
         ):
-
         super(ActorCritic, self).__init__()
 
-        self.state_dim = state_dim # hidden state dimension which is input to A and to C
-
-        self.affine1 = nn.Sequential(
-            nn.Linear(num_states, state_dim),
-            nn.ReLU6()
-        )
-
-        # --------------- ACTOR -----------------
-        
-        actor_layers = []
-        actor_prev_hidden = state_dim
-
-        for actor_hidden in range(actor_hiddens):
-            actor_layers += [
-                nn.Linear(actor_prev_hidden, actor_hidden),
-                nn.Dropout(p=dropout),
-                nn.ReLU6(),
-            ]
-            actor_prev_hidden = actor_hidden
-
-        actor_layers += [
-            nn.Linear(actor_prev_hidden, num_actions),
-            nn.Softmax(dim=-1)
-        ]
-
-        self.action_head = nn.Sequential(actor_layers)
-
-        # --------------- CRITIC -----------------
-
-        critic_layers = []
-        critic_prev_hidden = state_dim
-
-        for critic_hidden in range(critic_hiddens):
-            critic_layers += [
-                nn.Linear(critic_prev_hidden, critic_hidden),
-                nn.ReLU6(),
-            ]
-            critic_prev_hidden = critic_hidden
-
-        critic_layers += [
-            nn.Linear(critic_prev_hidden, 1),
-        ]
-
-        self.value_head = nn.Sequential(critic_layers)
-
-        # action & reward buffer
+        # action & reward buffers
         self.saved_actions = []
         self.episode_reward = 0
         self.episode_rewards = []
@@ -87,7 +36,7 @@ class ActorCritic(nn.Module):
         """
         forward of both actor and critic
         """
-        x = self.affine1(x)
+        x = self.encoder(x)
 
         # actor: choses action to take from state s_t 
         # by returning probability of each action
@@ -168,3 +117,139 @@ class ActorCritic(nn.Module):
         model.episode_reward = 0
         del model.episode_rewards[:]
         del model.saved_actions[:]
+
+
+class ActorCriticLinear(ActorCritic):
+    """
+    implements both actor and critic in one model, linearly
+    """
+    def __init__(
+        self,
+        num_states,
+        num_actions, 
+        state_dim=64,
+        actor_hiddens=[128,32],
+        critic_hiddens=[128, 32, 4],
+        dropout=.2,
+        gamma=.99,
+        **kwargs
+        ):
+
+        super(ActorCriticLinear, self).__init__()
+
+        self.state_dim = state_dim # hidden state dimension which is input to A and to C
+
+        # --------------- ENCODER --------------
+
+        self.encoder = nn.Sequential(
+            nn.Linear(num_states, state_dim),
+            nn.ReLU6()
+        )
+
+        # --------------- ACTOR -----------------
+        
+        actor_layers = []
+        actor_prev_hidden = state_dim
+
+        for actor_hidden in actor_hiddens:
+            actor_layers += [
+                nn.Linear(actor_prev_hidden, actor_hidden),
+                nn.Dropout(p=dropout),
+                nn.ReLU6(),
+            ]
+            actor_prev_hidden = actor_hidden
+
+        actor_layers += [
+            nn.Linear(actor_prev_hidden, num_actions),
+            nn.Softmax(dim=-1)
+        ]
+
+        self.action_head = nn.Sequential(*actor_layers)
+
+        # --------------- CRITIC -----------------
+
+        critic_layers = []
+        critic_prev_hidden = state_dim
+
+        for critic_hidden in critic_hiddens:
+            critic_layers += [
+                nn.Linear(critic_prev_hidden, critic_hidden),
+                nn.ReLU6(),
+            ]
+            critic_prev_hidden = critic_hidden
+
+        critic_layers += [
+            nn.Linear(critic_prev_hidden, 1),
+        ]
+
+        self.value_head = nn.Sequential(*critic_layers)
+
+
+class ActorCriticConv(ActorCritic):
+    """
+    implements both actor and critic in one model, conventionally
+    """
+    def __init__(
+        self,
+        board_size, # e.g. 17
+        num_actions, 
+        in_channels,
+        state_dim=64,
+        actor_channels=[7, 5, 3],
+        critic_channels=[7, 5, 5],
+        dropout=.2,
+        gamma=.99,
+        **kwargs
+        ):
+
+        super(ActorCriticConv, self).__init__()
+
+        state_dim = in_channels # hidden channels which are input to A and to C
+
+        # --------------- ENCODER --------------
+
+        self.encoder = nn.Sequential(
+            nn.Conv2d(in_channels, state_dim),
+            nn.ReLU6()
+        )
+
+        # --------------- ACTOR -----------------
+        
+        actor_layers = []
+        actor_prev_channel = state_dim
+
+        for actor_channel in actor_channels:
+            actor_layers += [
+                nn.Conv2d(actor_prev_channel, actor_channel),
+                nn.ReLU6(),
+            ]
+            actor_prev_channel = actor_channel
+
+        flattened_dim = board_size*in_channels # TODO determine by running model
+        actor_layers += [
+            nn.Flatten(1),
+            nn.Linear(flattened_dim, num_actions),
+            nn.Softmax(dim=-1)
+        ]
+
+        self.action_head = nn.Sequential(*actor_layers)
+
+        # --------------- CRITIC -----------------
+
+        critic_layers = []
+        critic_prev_channel = state_dim
+
+        for critic_channel in critic_channels:
+            critic_layers += [
+                nn.Linear(critic_prev_channel, critic_channel),
+                nn.ReLU6(),
+            ]
+            critic_prev_channel = critic_channel
+
+        critic_layers += [
+            nn.Linear(critic_prev_channel, 1),
+        ]
+
+        self.value_head = nn.Sequential(*critic_layers)
+
+

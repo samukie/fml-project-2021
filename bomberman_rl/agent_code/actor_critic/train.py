@@ -12,7 +12,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 
-from .actor_critic import update
 
 MODELS = "models/"
 

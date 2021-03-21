@@ -35,6 +35,7 @@ def get_minimum_distance(current, targets, board_size):
 
 def get_features(namespace, game_state):
     # ------------------ FEATURE ENGINEERING HERE ---------------------
+    assert False, game_state
 
     # 1st feat: 4 neighboring fields empty or not
 
