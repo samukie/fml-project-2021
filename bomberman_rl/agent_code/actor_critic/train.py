@@ -16,14 +16,14 @@ from torch.distributions import Categorical
 MODELS = "models/"
 
 # This is only an example!
-Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
-
-# Hyper parameters -- DO modify
-TRANSITION_HISTORY_SIZE = 3  # keep only ... last transitions
-RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
-
-# Events
-PLACEHOLDER_EVENT = "PLACEHOLDER"
+# Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
+# 
+# # Hyper parameters -- DO modify
+# TRANSITION_HISTORY_SIZE = 3  # keep only ... last transitions
+# RECORD_ENEMY_TRANSITIONS = 1.0  # record enemy transitions with probability ...
+# 
+# # Events
+# PLACEHOLDER_EVENT = "PLACEHOLDER"
 
 
 def setup_training(self):

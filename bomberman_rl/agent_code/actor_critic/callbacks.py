@@ -133,7 +133,7 @@ def setup(self):
         # 5:'WAIT',
     }
     self.num_features = 6 # determine by looking at get_features()
-    self.num_actions = 1 # model outputs int to index action_dict
+    self.num_actions = len(self.action_dict) # model outputs int to index action_dict
 
     self.model_path = MODELS+"my-saved-model.pt"
 
@@ -153,7 +153,7 @@ def setup(self):
         #     gamma=0.99,
         # )
 
-        num_heads = 6
+        num_heads = 2
 
         self.model = ActorCriticTransformer(
             board_size=self.board_size,
@@ -162,6 +162,7 @@ def setup(self):
             hidden_dim=num_heads*self.board_size,
             num_heads=num_heads,
             mlp_dim=self.board_size*num_heads*2,
+            num_layers=2,
         )
 
         self.logger.info("Successfully set up model:")

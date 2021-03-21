@@ -161,6 +161,7 @@ class ActorCriticLinear(ActorCritic):
         )
 
 
+
         self.state_dim = state_dim # hidden state dimension which is input to A and to C
 
         # --------------- ENCODER --------------
@@ -310,7 +311,7 @@ class ActorCriticTransformer(ActorCritic):
         # --------------- ACTOR -----------------
         
 
-        self._action_head = ViT(
+        actor = ViT(
             image_size = board_size,
             channels=num_states,
             patch_size = 1,
@@ -322,6 +323,10 @@ class ActorCriticTransformer(ActorCritic):
             dropout = dropout,
             emb_dropout = dropout,
         )
+        self._action_head = nn.Sequential(
+            actor,
+            nn.Sigmoid()
+        )
 
 
         # --------------- CRITIC -----------------
@@ -329,7 +334,7 @@ class ActorCriticTransformer(ActorCritic):
         critic_layers = [
             nn.Flatten(2),
         ]
-        critic_prev_hidden = board_size **2
+        critic_prev_hidden = board_size ** 2
 
         for critic_hidden in critic_hiddens:
             critic_layers += [
