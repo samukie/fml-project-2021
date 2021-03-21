@@ -19,16 +19,63 @@ class ActorCritic(nn.Module):
     """
     implements both actor and critic in one model
     """
-    def __init__(self, num_states, num_actions, gamma):
+    def __init__(
+        self,
+        num_states,
+        num_actions, 
+        state_dim=64,
+        actor_hiddens=[128,32],
+        critic_hiddens=[128],
+        dropout=.2,
+        gamma=.99
+        ):
+
         super(ActorCritic, self).__init__()
 
-        self.affine1 = nn.Linear(num_states, 128)
+        self.state_dim = state_dim # hidden state dimension which is input to A and to C
 
-        # actor's layer
-        self.action_head = nn.Linear(128, num_actions)
+        self.affine1 = nn.Sequential(
+            nn.Linear(num_states, state_dim),
+            nn.ReLU6()
+        )
 
-        # critic's layer
-        self.value_head = nn.Linear(128, 1)
+        # --------------- ACTOR -----------------
+        
+        actor_layers = []
+        actor_prev_hidden = state_dim
+
+        for actor_hidden in range(actor_hiddens):
+            actor_layers += [
+                nn.Linear(actor_prev_hidden, actor_hidden),
+                nn.Dropout(p=dropout),
+                nn.ReLU6(),
+            ]
+            actor_prev_hidden = actor_hidden
+
+        actor_layers += [
+            nn.Linear(actor_prev_hidden, num_actions),
+            nn.Softmax(dim=-1)
+        ]
+
+        self.action_head = nn.Sequential(actor_layers)
+
+        # --------------- CRITIC -----------------
+
+        critic_layers = []
+        critic_prev_hidden = state_dim
+
+        for critic_hidden in range(critic_hiddens):
+            critic_layers += [
+                nn.Linear(critic_prev_hidden, critic_hidden),
+                nn.ReLU6(),
+            ]
+            critic_prev_hidden = critic_hidden
+
+        critic_layers += [
+            nn.Linear(critic_prev_hidden, 1),
+        ]
+
+        self.value_head = nn.Sequential(critic_layers)
 
         # action & reward buffer
         self.saved_actions = []
@@ -40,11 +87,11 @@ class ActorCritic(nn.Module):
         """
         forward of both actor and critic
         """
-        x = F.relu(self.affine1(x))
+        x = self.affine1(x)
 
         # actor: choses action to take from state s_t 
         # by returning probability of each action
-        action_prob = F.softmax(self.action_head(x), dim=-1)
+        action_prob = self.action_head(x)
 
         # critic: evaluates being in the state s_t
         state_values = self.value_head(x)
@@ -71,53 +118,53 @@ class ActorCritic(nn.Module):
         # the action to take (left or right)
         return action.item()
 
-def update(model, optimizer):
-    """
-    Call at end of one episode 
+    def update(self, optimizer, eps):
+        """
+        Call at end of one episode 
 
-    Training code. 
-    Calculates actor and critic loss and performs backprop.
+        Training code. 
+        Calculates actor and critic loss and performs backprop.
 
-    For meaning of "advantage", "reward", "value", 
-    see "Back to Baselines" section of
-    https://towardsdatascience.com/understanding-actor-critic-methods-931b97b6df3f
-    """
+        For meaning of "advantage", "reward", "value", 
+        see "Back to Baselines" section of
+        https://towardsdatascience.com/understanding-actor-critic-methods-931b97b6df3f
+        """
 
-    R = 0
-    saved_actions = model.saved_actions
-    policy_losses = [] # list to save actor (policy) loss
-    value_losses = [] # list to save critic (value) loss
-    returns = [] # list to save the true values
+        R = 0
+        saved_actions = model.saved_actions
+        policy_losses = [] # list to save actor (policy) loss
+        value_losses = [] # list to save critic (value) loss
+        returns = [] # list to save the true values
 
-    # calculate the true value using episode_rewards returned from the environment
-    for r in model.episode_rewards[::-1]:
-        # calculate the discounted value
-        R = r + model.gamma * R
-        returns.insert(0, R)
+        # calculate the true value using episode_rewards returned from the environment
+        for r in model.episode_rewards[::-1]:
+            # calculate the discounted value
+            R = r + model.gamma * R
+            returns.insert(0, R)
 
-    returns = torch.tensor(returns)
-    returns = (returns - returns.mean()) / (returns.std() + eps)
+        returns = torch.tensor(returns)
+        returns = (returns - returns.mean()) / (returns.std() + eps)
 
-    for (log_prob, value), R in zip(saved_actions, returns):
-        advantage = R - value.item()
+        for (log_prob, value), R in zip(saved_actions, returns):
+            advantage = R - value.item()
 
-        # calculate actor (policy) loss 
-        policy_losses.append(-log_prob * advantage)
+            # calculate actor (policy) loss 
+            policy_losses.append(-log_prob * advantage)
 
-        # calculate critic (value) loss using L1 smooth loss
-        value_losses.append(F.smooth_l1_loss(value, torch.tensor([R])))
+            # calculate critic (value) loss using L1 smooth loss
+            value_losses.append(F.smooth_l1_loss(value, torch.tensor([R])))
 
-    # reset gradients
-    optimizer.zero_grad()
+        # reset gradients
+        optimizer.zero_grad()
 
-    # sum up all the values of policy_losses and value_losses
-    loss = torch.stack(policy_losses).sum() + torch.stack(value_losses).sum()
+        # sum up all the values of policy_losses and value_losses
+        loss = torch.stack(policy_losses).sum() + torch.stack(value_losses).sum()
 
-    # perform backprop
-    loss.backward()
-    optimizer.step()
+        # perform backprop
+        loss.backward()
+        optimizer.step()
 
-    # reset episode_rewards and action buffer
-    model.episode_reward = 0
-    del model.episode_rewards[:]
-    del model.saved_actions[:]
+        # reset episode_rewards and action buffer
+        model.episode_reward = 0
+        del model.episode_rewards[:]
+        del model.saved_actions[:]

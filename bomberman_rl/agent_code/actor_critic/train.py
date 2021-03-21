@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 
-from actor_critic import update
+from .actor_critic import update
 
 MODELS = "models/"
 
@@ -62,18 +62,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
         # ------------------- REWARD ENGINEERING HERE ---------------
 
-        current_action, current_obs = get_action_and_observation(self, old_game_state)
-        next_action, next_obs = get_action_and_observation(self, new_game_state)
-        inverted_actions = {v: k for k, v in self.action_dict.items()}
-        current_action_index = inverted_actions[current_action]
-
-        current_surrounding = get_environment(old_game_state)
-        future_surrounding = get_environment(new_game_state)
-        
-        current_value = self.model[current_obs[0]][current_obs[1]][current_surrounding][current_action_index]
-        max_future_value = np.max(self.model[next_obs[0]][next_obs[1]][future_surrounding])
-
-        # get rewards:
+        # initialize rewards:
         reward = reward_from_events(self, events)
 
         # additional_reward 
@@ -81,50 +70,19 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             prev_dist =  get_minimum_distance(old_game_state['self'][3], old_game_state['coins'], self.board_size)
             curr_dist =  get_minimum_distance(new_game_state['self'][3], new_game_state['coins'], self.board_size)
             if curr_dist < prev_dist:
-                reward+=20
+                reward += 20
             elif curr_dist > prev_dist:
-                reward-=20
+                reward -= 20
 
-        model.episode_rewards.append(reward)
-        model.episode_reward += reward
+        self.model.episode_rewards.append(reward)
+        self.model.episode_reward += reward
+
 
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
 
     # Idea: Add your own events to hand out rewards
     #if ...:
     #    events.append(PLACEHOLDER_EVENT)
-
-def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
-    """
-    Called at the end of each game or when the agent died to hand out final rewards.
-
-    This is similar to reward_update. self.events will contain all events that
-    occurred during your agent's final step.
-
-    This is *one* of the places where you could update your agent.
-    This is also a good place to store an agent that you updated.
-
-    :param self: The same object that is passed to all of your callbacks.
-    """
-    self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
-
-    # update cumulative reward
-    self.running_reward = self.EMA * ep_reward + (1 - self.EMA) * self.running_reward
-
-    self.logger.info('Episode {}\tLast reward: {:.2f}\tEMA reward: {:.2f}'.format(
-        self.i_episode, self.model.ep_reward, self.running_reward))
-
-    # main training code
-    update(self.model, self.optimizer)
-
-    self.i_episode += 1
-
-
-    # Store the model
-    # TODO only if its best ? 
-    with open(self.model_path, "wb") as file:
-        pickle.dump(self.model, file)
-
 
 def reward_from_events(self, events: List[str]) -> int:
     """
@@ -147,3 +105,36 @@ def reward_from_events(self, events: List[str]) -> int:
 
     self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
     return reward_sum
+
+
+def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
+    """
+    Called at the end of each game or when the agent died to hand out final rewards.
+
+    This is similar to reward_update. self.events will contain all events that
+    occurred during your agent's final step.
+
+    This is *one* of the places where you could update your agent.
+    This is also a good place to store an agent that you updated.
+
+    :param self: The same object that is passed to all of your callbacks.
+    """
+    self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
+
+    # update cumulative reward
+    self.running_reward = self.EMA * self.model.episode_reward + (1 - self.EMA) * self.running_reward
+
+    self.logger.info('Episode {}\tLast reward: {:.2f}\tEMA reward: {:.2f}'.format(
+        self.i_episode, self.model.episode_reward, self.running_reward))
+
+    # main training code
+    self.model.update(self.optimizer, self.eps)
+
+    self.i_episode += 1
+
+
+    # Store the model
+    # TODO only if its best ? 
+    with open(self.model_path, "wb") as file:
+        pickle.dump(self.model, file)
+
