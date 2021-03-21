@@ -137,7 +137,7 @@ def setup(self):
 
     self.model_path = MODELS+"my-saved-model.pt"
 
-    if self.train or not os.path.isfile(self.model_path):
+    if os.path.isfile(self.model_path):
         self.logger.info("Setting up model from scratch.")
 
         # self.model = ActorCriticLinear(
@@ -173,13 +173,6 @@ def setup(self):
         with open(self.model_path, "rb") as file:
             self.model = pickle.load(file)
     
-    self.lr = 3e-2
-    self.eps = 1e-7
-    self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
-
-    self.running_reward = 10
-    self.EMA = 0.05 # Exponential moving average decay to calc running reward to display
-
 
 
 def act(self, game_state: dict) -> str:

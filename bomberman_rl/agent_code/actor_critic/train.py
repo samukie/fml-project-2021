@@ -26,6 +26,35 @@ MODELS = "models/"
 # PLACEHOLDER_EVENT = "PLACEHOLDER"
 
 
+# -------------------- Helper functions ---------------------
+
+def optimizer_to(optim, device):
+    # via https://discuss.pytorch.org/t/moving-optimizer-from-cpu-to-gpu/96068/3
+    for param in optim.state.values():
+        # Not sure there are any global tensors in the state dict
+        if isinstance(param, torch.Tensor):
+            param.data = param.data.to(device)
+            if param._grad is not None:
+                param._grad.data = param._grad.data.to(device)
+        elif isinstance(param, dict):
+            for subparam in param.values():
+                if isinstance(subparam, torch.Tensor):
+                    subparam.data = subparam.data.to(device)
+                    if subparam._grad is not None:
+                        subparam._grad.data = subparam._grad.data.to(device)
+
+
+def get_minimum_distance(current, targets, board_size):
+    if targets == []: 
+        return -1
+    else:
+        min_dist = np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
+        return min_dist
+
+
+
+# ----------------------------- Training methods --------------------------------- 
+
 def setup_training(self):
     """
     Initialise self for training purpose.
@@ -34,9 +63,18 @@ def setup_training(self):
 
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
-    # Example: Setup an array that will note transition tuples
-    # (s, a, r, s')
+
+    self.lr = 3e-2
+    self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
+
+    self.running_reward = 10 # arbitrarily initialize running reward
+    self.EMA = 0.05 # Exponential moving average decay to calc running reward to display
     self.i_episode = 0
+
+    if torch.cuda.is_available():
+        device = "cuda"
+        self.model.to(device)
+        optimizer_to(self.optimizer, device)
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -66,12 +104,17 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
 
         # additional_reward 
         if old_game_state['coins']!=[] and new_game_state['coins']!=[]:
+
             prev_dist =  get_minimum_distance(old_game_state['self'][3], old_game_state['coins'], self.board_size)
             curr_dist =  get_minimum_distance(new_game_state['self'][3], new_game_state['coins'], self.board_size)
-            if curr_dist < prev_dist:
+
+            if curr_dist == -1:
+                reward += 1000
+            elif curr_dist < prev_dist:
                 reward += 20
             elif curr_dist > prev_dist:
-                reward -= 20
+                if not e.COIN_COLLECTED in events:
+                    reward -= 20
 
         self.model.episode_rewards.append(reward)
         self.model.episode_reward += reward
@@ -127,13 +170,12 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
         self.i_episode, self.model.episode_reward, self.running_reward))
 
     # main training code
-    self.model.update(self.optimizer, self.eps)
+    self.model.update(self.optimizer)
 
     self.i_episode += 1
 
-
     # Store the model
-    # TODO only if its best ? 
+    # TODO only if its best ? torch.save? ckpt dict mit model/episode/...
     with open(self.model_path, "wb") as file:
         pickle.dump(self.model, file)
 

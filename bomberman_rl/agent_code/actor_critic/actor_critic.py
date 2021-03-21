@@ -22,6 +22,7 @@ class ActorCritic(nn.Module):
         self,
         num_actions=1, 
         gamma=.99,
+        eps=1e-7,
         **kwargs,
         ):
         super(ActorCritic, self).__init__()
@@ -31,6 +32,7 @@ class ActorCritic(nn.Module):
         self.episode_reward = 0
         self.episode_rewards = []
         self.gamma = gamma
+        self.eps = eps
     
     def encode(self, x):
         try:
@@ -85,7 +87,7 @@ class ActorCritic(nn.Module):
         # the action to take (left or right)
         return action.item()
 
-    def update(self, optimizer, eps):
+    def update(self, optimizer):
         """
         Call at end of one episode 
 
@@ -110,7 +112,7 @@ class ActorCritic(nn.Module):
             returns.insert(0, R)
 
         returns = torch.tensor(returns)
-        returns = (returns - returns.mean()) / (returns.std() + eps)
+        returns = (returns - returns.mean()) / (returns.std() + self.eps)
 
         for (log_prob, value), R in zip(saved_actions, returns):
             advantage = R - value.item()
@@ -303,14 +305,12 @@ class ActorCriticTransformer(ActorCritic):
             gamma=gamma,
         )
 
-
         # --------------- ENCODER --------------
 
         self._encoder = nn.Identity()
 
         # --------------- ACTOR -----------------
         
-
         actor = ViT(
             image_size = board_size,
             channels=num_states,
@@ -327,7 +327,6 @@ class ActorCriticTransformer(ActorCritic):
             actor,
             nn.Sigmoid()
         )
-
 
         # --------------- CRITIC -----------------
 
