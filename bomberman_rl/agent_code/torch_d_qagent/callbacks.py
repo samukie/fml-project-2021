@@ -3,12 +3,9 @@ import pickle
 import random
 import operator
 import numpy as np
+from .DQN import *
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
-
-def construct_table(feature_size, board_size):
-    q_table =  np.random.rand(board_size+2, board_size+2, 16, len(ACTIONS))
-    return q_table
 
 def get_minimum(current, targets, board_size):
     #print(targets)
@@ -38,23 +35,38 @@ def get_environment(game_state):
         to_decimal += int(digit)*2**(index)
     return to_decimal
 
+def get_coin_representation(coin_coordinate):
+    decimal = coin_coordinate[0]*19**0 + coin_coordinate[1]*19**1
+    return decimal
+
 def get_action_and_observation(self, game_state):
+    
     arena = game_state['field']
     _, score, bombs_left, (x, y) = game_state['self']
     current = (x,y)
     # observation
+
     surrounding = get_environment(game_state)
     valid_actions = ['LEFT', 'RIGHT', 'UP', 'DOWN'] 
     min_coin_index =  get_minimum(current, game_state['coins'], self.board_size)
-    if min_coin_index == -1 or np.random.randint(60,70)==69:
-        best_action = np.random.choice(ACTIONS, 1)[0]
-        observation = [18,18]
-    else: 
+    
+    if np.random.random() > 0.1:
+        # Get action from Q table
         min_coin = game_state['coins'][min_coin_index]
-        observation = [x-min_coin[0],y-min_coin[1]]
-        action_values = self.model[observation[0]][observation[1]][surrounding]
-        best_action = self.action_dict[np.argmax(action_values)]
-    return best_action, observation
+        coin_coordinate = (x-min_coin[0],y-min_coin[1])
+        coin_decimal = get_coin_representation(coin_coordinate)
+        state = [coin_decimal, surrounding]
+        #best_action = np.argmax(self.policy_net.([1,coin_decimal, surrounding]))
+        #print("best action!!!! ", torch.argmax(self.policy_net(torch.FloatTensor(state))))
+        #best_action = self.policy_net(torch.FloatTensor(state)).max()
+        best_action = torch.argmax(self.policy_net(torch.FloatTensor(state)))
+    else:
+        # Get random action
+        #print('random')
+        coin_decimal = 361
+        best_action = torch.as_tensor(np.random.randint(0, len(ACTIONS)))
+    #print(best_action)
+    return best_action, [coin_decimal, surrounding]
 
 
 def setup(self):
@@ -76,15 +88,40 @@ def setup(self):
         self.logger.info("Setting up model from scratch.")
         #weights = np.random.rand(len(ACTIONS))
         #self.model = weights / weights.sum()
-        self.model = construct_table(17,17)
+        """
+        n_actions = len(ACTIONS)
+        self.policy_net = DQN(2, 64, n_actions).to(device)
+        self.target_net = DQN(2, 64, n_actions).to(device)
+        self.target_net.load_state_dict(self.policy_net.state_dict())
+        self.target_net.eval()
+        """
+        n_actions = len(ACTIONS)
+        self.policy_net = DQN(2, 64, n_actions).to(device)
+        self.target_net = DQN(2, 64, n_actions).to(device)
+
+        self.policy_net.load_state_dict(torch.load("policy_net.pt"))
+        self.target_net.load_state_dict(torch.load("target_net.pt"))
+
+        self.policy_net.eval()
+        self.target_net.eval()
         print('contructed')
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
-            self.model = pickle.load(file)
-            print(self.model)
+            #self.model = pickle.load(file)
+            #self.model = keras.models.load_model("my-saved-model.pt")
+            #self.policy_net = DQN(screen_height, screen_width, n_actions).to(device)
+            #self.target_net = DQN(screen_height, screen_width, n_actions).to(device)
+            n_actions = len(ACTIONS)
+            self.policy_net = DQN(2, 64, n_actions).to(device)
+            self.target_net = DQN(2, 64, n_actions).to(device)
+
+            self.policy_net.load_state_dict(torch.load("policy_net.pt"))
+            self.target_net.load_state_dict(torch.load("target_net.pt"))
+
+            self.policy_net.eval()
+            self.target_net.eval()
             print('loaded')
-            print(self.model.shape)
     self.board_size = 17
     self.action_dict = {
         0:'LEFT',
@@ -103,8 +140,7 @@ def act(self, game_state: dict) -> str:
     :return: The action to take as a string.
     """
     action, _ = get_action_and_observation(self, game_state)
-    #print('TAKE IT ', action)
-    return action
+    return  self.action_dict[action.item()]
 
 
 def state_to_features(game_state: dict) -> np.array:

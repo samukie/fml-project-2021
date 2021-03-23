@@ -30,38 +30,18 @@ def setup_training(self):
     """
     # Example: Setup an array that will note transition tuples
     # (s, a, r, s')
+    """
+    BATCH_SIZE = 64
+    GAMMA = 0.999
+    EPS_START = 0.9
+    EPS_END = 0.05
+    EPS_DECAY = 200
+    TARGET_UPDATE = 10
+    """
+
+    self.optimizer = optim.RMSprop(self.policy_net.parameters())
+    self.memory = ReplayMemory(10000)
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
-    self.lr = 0.3
-    self.discount = 0.85
-
-    DISCOUNT = 0.99
-    REPLAY_MEMORY_SIZE = 50_000  # How many last steps to keep for model training
-    MIN_REPLAY_MEMORY_SIZE = 1_000  # Minimum number of steps in a memory to start training
-    MINIBATCH_SIZE = 64  # How many steps (samples) to use for training
-    UPDATE_TARGET_EVERY = 5  # Terminal states (end of episodes)
-    MODEL_NAME = '2x256'
-    MIN_REWARD = -200  # For model save
-    MEMORY_FRACTION = 0.20
-
-    # Environment settings
-    EPISODES = 20_000
-
-    # Exploration settings
-    self.epsilon = 1  # not a constant, going to be decayed
-    EPSILON_DECAY = 0.99975
-    MIN_EPSILON = 0.001
-
-    #  Stats settings
-    AGGREGATE_STATS_EVERY = 50  # episodes
-    SHOW_PREVIEW = False
-
-    # For stats
-    ep_rewards = [-200]
-
-    # For more repetitive results
-    random.seed(1)
-    np.random.seed(1)
-    tf.random.set_seed(1)
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
@@ -93,15 +73,14 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         #inverted_actions = {v: k for k, v in self.action_dict.items()}
         #current_action_index = inverted_actions[current_action]
 
-        current_surrounding = get_environment(old_game_state)
-        future_surrounding = get_environment(new_game_state)
+        #current_surrounding = get_environment(old_game_state)
+        #future_surrounding = get_environment(new_game_state)
         #print('OBS', current_surrounding)
-        current_obs.append(current_surrounding)
-        next_obs.append(future_surrounding)
+        #current_obs.append(current_surrounding)
+        #next_obs.append(future_surrounding)
         #current_value = self.model[current_obs[0]][current_obs[1]][current_surrounding][current_action_index]
         #max_future_value = np.max(self.model[next_obs[0]][next_obs[1]][future_surrounding])
-        tf.expand_dims(current_obs, -1)
-        tf.expand_dims(next_obs, -1)
+  
 
 
         reward = reward_from_events(self, events)
@@ -113,14 +92,88 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                 reward+=20
             elif curr_dist > prev_dist:
                 reward-=20
+        #print('1',current_action)
+        #print('2',current_obs)
+        #print(next_obs)
+        #print(reward)
+        #print("ACTION ", current_action)
+        self.memory.push(current_obs,torch.as_tensor(current_action),torch.as_tensor(next_obs),torch.FloatTensor([reward]))
 
-        self.model.update_replay_memory((current_action, current_obs, reward, next_obs, done))
-        self.model.train(done)
+        optimize_model(self.memory, self.policy_net, self.target_net, self.optimizer)
+        #if done:
+        #    episode_durations.append(t + 1)
+        #    plot_durations()
+        #optimize_model()
 
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
 
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
 
+def optimize_model(memory, policy_net, target_net, optimizer):
+    if len(memory) < BATCH_SIZE:
+        return
+    transitions = memory.sample(BATCH_SIZE)
+    
+    # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
+    # detailed explanation). This converts batch-array of Transitions
+    # to Transition of batch-arrays.
+    batch = Transition(*zip(*transitions))
+    #print('next state ', batch.state)
+    # Compute a mask of non-final states and concatenate the batch elements
+    # (a final state would've been the one after which simulation ended)
+    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                          batch.next_state)), device=device, dtype=torch.bool)
+    non_final_next_states = torch.cat([s for s in batch.next_state
+                                                if s is not None])
+    #print("NEXT STATE ", len(batch.next_state))
+    
+    next_states = tuple(torch.as_tensor(x).float() for x in batch.next_state)                                         
+    non_final_next_states = torch.stack(next_states)
+
+    states = tuple(torch.as_tensor(x).float() for x in batch.state)                                         
+    state_batch = torch.stack(states)
+    action_batch = torch.stack(batch.action)
+    reward_batch = torch.cat(batch.reward)
+
+    #print(state_batch.shape)
+    # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
+    # columns of actions taken. These are the actions which would've been taken
+    # for each batch state according to policy_net
+    #print('state')
+    #print(batch.state)
+    #print(states)
+    #print(state_batch)
+    #print("action")
+    #print(batch.action)
+    #print(action_batch)
+    #print(action_batch.shape)
+    #print(policy_net(state_batch).shape)
+    state_action_values = policy_net(state_batch).gather(1, action_batch.unsqueeze(1))
+    #print('state action')
+    #print(state_action_values.shape)
+    
+    #.gather(1, action_batch)
+
+    next_state_values = torch.zeros(BATCH_SIZE, device=device)
+    #print('other new')
+    #print(next_state_values.shape)
+    #print(next_state_values)
+    #print(non_final_mask)
+    #print(non_final_next_states)
+    #print(non_final_next_states.shape)
+    next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach()
+    # Compute the expected Q values
+    expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+
+    # Compute Huber loss
+    loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+
+    # Optimize the model
+    optimizer.zero_grad()
+    loss.backward()
+    for param in policy_net.parameters():
+        param.grad.data.clamp_(-1, 1)
+    optimizer.step()
 
 def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
     """
@@ -134,6 +187,10 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     :param self: The same object that is passed to all of your callbacks.
     """
+
+    torch.save(self.policy_net.state_dict(), "policy_net.pt")
+    torch.save(self.target_net.state_dict(), "target_net.pt")
+
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
     self.transitions.append(Transition(state_to_features(last_game_state), last_action, None, reward_from_events(self, events)))
 
