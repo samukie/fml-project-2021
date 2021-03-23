@@ -88,7 +88,7 @@ def setup(self):
         self.logger.info("Setting up model from scratch.")
         #weights = np.random.rand(len(ACTIONS))
         #self.model = weights / weights.sum()
-        """
+        
         n_actions = len(ACTIONS)
         self.policy_net = DQN(2, 64, n_actions).to(device)
         self.target_net = DQN(2, 64, n_actions).to(device)
@@ -105,6 +105,7 @@ def setup(self):
         self.policy_net.eval()
         self.target_net.eval()
         print('contructed')
+        """
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
