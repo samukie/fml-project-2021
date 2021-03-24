@@ -7,67 +7,6 @@ from .DQN import *
 
 ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
 
-def get_minimum(current, targets, board_size):
-    #print(targets)
-    if targets == []: 
-        return -1
-    else:
-        return np.argmin(np.sum(np.abs(np.subtract(targets, current)), axis=1))
-
-def get_minimum_distance(current, targets, board_size):
-    if targets == []: 
-        return False
-    else:
-        return np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
-
-def get_environment(game_state):
-    _, _, _, (x, y) = game_state['self']
-    arena = game_state['field']
-    directions = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-    binary = ''
-    for index, direction in enumerate(directions): 
-        if arena[directions[index]] == 0:
-            binary += '1'
-        else: 
-            binary += '0'
-    to_decimal = 0 
-    for index, digit in enumerate(binary[len(binary)::-1]):
-        to_decimal += int(digit)*2**(index)
-    return to_decimal
-
-def get_coin_representation(coin_coordinate):
-    decimal = coin_coordinate[0]*19**0 + coin_coordinate[1]*19**1
-    return decimal
-
-def get_action_and_observation(self, game_state):
-    
-    arena = game_state['field']
-    _, score, bombs_left, (x, y) = game_state['self']
-    current = (x,y)
-    # observation
-
-    surrounding = get_environment(game_state)
-    valid_actions = ['LEFT', 'RIGHT', 'UP', 'DOWN'] 
-    min_coin_index =  get_minimum(current, game_state['coins'], self.board_size)
-    
-    if np.random.random() > 0.1:
-        # Get action from Q table
-        min_coin = game_state['coins'][min_coin_index]
-        coin_coordinate = (x-min_coin[0],y-min_coin[1])
-        coin_decimal = get_coin_representation(coin_coordinate)
-        state = [coin_decimal, surrounding]
-        #best_action = np.argmax(self.policy_net.([1,coin_decimal, surrounding]))
-        #print("best action!!!! ", torch.argmax(self.policy_net(torch.FloatTensor(state))))
-        #best_action = self.policy_net(torch.FloatTensor(state)).max()
-        best_action = torch.argmax(self.policy_net(torch.FloatTensor(state)))
-    else:
-        # Get random action
-        #print('random')
-        coin_decimal = 361
-        best_action = torch.as_tensor(np.random.randint(0, len(ACTIONS)))
-    #print(best_action)
-    return best_action, [coin_decimal, surrounding]
-
 
 def setup(self):
     """
@@ -90,8 +29,8 @@ def setup(self):
         #self.model = weights / weights.sum()
         
         n_actions = len(ACTIONS)
-        self.policy_net = DQN(2, 64, n_actions).to(device)
-        self.target_net = DQN(2, 64, n_actions).to(device)
+        self.policy_net = DQN(8, 64, n_actions).to(device)
+        self.target_net = DQN(8, 64, n_actions).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         """
@@ -114,8 +53,8 @@ def setup(self):
             #self.policy_net = DQN(screen_height, screen_width, n_actions).to(device)
             #self.target_net = DQN(screen_height, screen_width, n_actions).to(device)
             n_actions = len(ACTIONS)
-            self.policy_net = DQN(2, 64, n_actions).to(device)
-            self.target_net = DQN(2, 64, n_actions).to(device)
+            self.policy_net = DQN(8, 64, n_actions).to(device)
+            self.target_net = DQN(8, 64, n_actions).to(device)
 
             self.policy_net.load_state_dict(torch.load("policy_net.pt"))
             self.target_net.load_state_dict(torch.load("target_net.pt"))
@@ -123,6 +62,7 @@ def setup(self):
             self.policy_net.eval()
             self.target_net.eval()
             print('loaded')
+    self.target = False
     self.board_size = 17
     self.action_dict = {
         0:'LEFT',
@@ -130,6 +70,52 @@ def setup(self):
         2:'UP',
         3:'DOWN',
     }
+
+def get_minimum(current, targets, board_size):
+    #print(targets)
+    if targets == []: 
+        return -1
+    else:
+        return np.argmin(np.sum(np.abs(np.subtract(targets, current)), axis=1))
+
+def get_minimum_distance(current, targets, board_size):
+    if targets == []: 
+        return False
+    else:
+        return np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
+
+def get_distance(current, target, board_size):
+    return np.sum(np.abs(np.subtract(target, current)))
+
+def target_is_valid(target, game_state): 
+    is_valid = False
+    for coin in game_state['coins']:
+        if coin[0]==target[0] and coin[1]==target[1]:
+            is_valid=True
+    return is_valid
+
+def get_coin_representation(coin_coordinate):
+    decimal = coin_coordinate[0]*19**0 + coin_coordinate[1]*19**1
+    return decimal
+
+def get_action_and_observation(self, game_state):
+    _, _, _, (x, y) = game_state['self']
+    current = (x,y)
+    arena = game_state['field']
+    # update target
+    if self.target: 
+        if not target_is_valid(self.target, game_state):
+            self.target=False
+    if not self.target:
+        self.target =  game_state['coins'][get_minimum(current, game_state['coins'], self.board_size)]
+    state = [x,y,arena[x+1, y], arena[x-1, y], arena[x, y+1], arena[x, y-1]]
+    if np.random.random() > 0.1:
+        state.extend([self.target[0],self.target[1]])
+        best_action = torch.argmax(self.policy_net(torch.FloatTensor(state)))
+    else:
+        state.extend([0,0])
+        best_action = torch.as_tensor(np.random.randint(0, len(ACTIONS)))
+    return best_action, state
 
 def act(self, game_state: dict) -> str:
     """
@@ -141,6 +127,7 @@ def act(self, game_state: dict) -> str:
     :return: The action to take as a string.
     """
     action, _ = get_action_and_observation(self, game_state)
+    #print(self.action_dict[action.item()])
     return  self.action_dict[action.item()]
 
 

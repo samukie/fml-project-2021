@@ -62,48 +62,20 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     """
 
     if old_game_state:
-        #print('model ', self.model)
-        done = False 
-
         current_action, current_obs = get_action_and_observation(self, old_game_state)
         next_action, next_obs= get_action_and_observation(self, new_game_state)
-
-        #print('curr', current_action)
-
-        #inverted_actions = {v: k for k, v in self.action_dict.items()}
-        #current_action_index = inverted_actions[current_action]
-
-        #current_surrounding = get_environment(old_game_state)
-        #future_surrounding = get_environment(new_game_state)
-        #print('OBS', current_surrounding)
-        #current_obs.append(current_surrounding)
-        #next_obs.append(future_surrounding)
-        #current_value = self.model[current_obs[0]][current_obs[1]][current_surrounding][current_action_index]
-        #max_future_value = np.max(self.model[next_obs[0]][next_obs[1]][future_surrounding])
-  
-
-
         reward = reward_from_events(self, events)
-        # additional_reward 
-        if old_game_state['coins']!=[] and new_game_state['coins']!=[]:
-            prev_dist =  get_minimum_distance(old_game_state['self'][3], old_game_state['coins'], self.board_size)
-            curr_dist =  get_minimum_distance(new_game_state['self'][3], new_game_state['coins'], self.board_size)
+        if self.target: 
+            prev_dist =  get_distance(old_game_state['self'][3], self.target, self.board_size)
+            curr_dist =  get_distance(new_game_state['self'][3], self.target, self.board_size)
             if curr_dist < prev_dist:
                 reward+=20
-            elif curr_dist > prev_dist:
-                reward-=20
-        #print('1',current_action)
-        #print('2',current_obs)
-        #print(next_obs)
-        #print(reward)
-        #print("ACTION ", current_action)
+            else:
+                if not e.COIN_COLLECTED in events:
+                    reward-=20
         self.memory.push(current_obs,torch.as_tensor(current_action),torch.as_tensor(next_obs),torch.FloatTensor([reward]))
-
         optimize_model(self.memory, self.policy_net, self.target_net, self.optimizer)
-        #if done:
-        #    episode_durations.append(t + 1)
-        #    plot_durations()
-        #optimize_model()
+ 
 
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
 
@@ -113,54 +85,19 @@ def optimize_model(memory, policy_net, target_net, optimizer):
     if len(memory) < BATCH_SIZE:
         return
     transitions = memory.sample(BATCH_SIZE)
-    
-    # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
-    # detailed explanation). This converts batch-array of Transitions
-    # to Transition of batch-arrays.
     batch = Transition(*zip(*transitions))
-    #print('next state ', batch.state)
-    # Compute a mask of non-final states and concatenate the batch elements
-    # (a final state would've been the one after which simulation ended)
     non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
                                           batch.next_state)), device=device, dtype=torch.bool)
     non_final_next_states = torch.cat([s for s in batch.next_state
                                                 if s is not None])
-    #print("NEXT STATE ", len(batch.next_state))
-    
     next_states = tuple(torch.as_tensor(x).float() for x in batch.next_state)                                         
     non_final_next_states = torch.stack(next_states)
-
     states = tuple(torch.as_tensor(x).float() for x in batch.state)                                         
     state_batch = torch.stack(states)
     action_batch = torch.stack(batch.action)
     reward_batch = torch.cat(batch.reward)
-
-    #print(state_batch.shape)
-    # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
-    # columns of actions taken. These are the actions which would've been taken
-    # for each batch state according to policy_net
-    #print('state')
-    #print(batch.state)
-    #print(states)
-    #print(state_batch)
-    #print("action")
-    #print(batch.action)
-    #print(action_batch)
-    #print(action_batch.shape)
-    #print(policy_net(state_batch).shape)
     state_action_values = policy_net(state_batch).gather(1, action_batch.unsqueeze(1))
-    #print('state action')
-    #print(state_action_values.shape)
-    
-    #.gather(1, action_batch)
-
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
-    #print('other new')
-    #print(next_state_values.shape)
-    #print(next_state_values)
-    #print(non_final_mask)
-    #print(non_final_next_states)
-    #print(non_final_next_states.shape)
     next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach()
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
@@ -203,7 +140,7 @@ def reward_from_events(self, events: List[str]) -> int:
     """
     game_rewards = {
         e.COIN_COLLECTED: 100,
-        e.INVALID_ACTION: -50
+        e.INVALID_ACTION: -50,
     }
     reward_sum = 0
     for event in events:

@@ -20,11 +20,12 @@ Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
 BATCH_SIZE = 64
-GAMMA = 0.999
-EPS_START = 0.9
-EPS_END = 0.05
-EPS_DECAY = 200
-TARGET_UPDATE = 10
+#GAMMA = 0.999
+GAMMA = 0.9
+EPS_START = 0.8
+EPS_END = 0.25
+EPS_DECAY = 100
+TARGET_UPDATE = 100
 
 # Get screen size so that we can initialize layers correctly based on shape
 # returned from AI gym. Typical dimensions at this point are close to 3x40x90
@@ -33,7 +34,7 @@ TARGET_UPDATE = 10
 # Update the target network, copying all weights and biases in DQN
 #if i_episode % TARGET_UPDATE == 0:
 #    target_net.load_state_dict(policy_net.state_dict())
-
+"""
 def select_action(state):
     global steps_done
     sample = random.random()
@@ -48,7 +49,7 @@ def select_action(state):
             return self.policy_net(state).max(1)[1].view(1, 1)
     else:
         return torch.tensor([[random.randrange(n_actions)]], device=device, dtype=torch.long)
-
+"""
 class ReplayMemory(object):
 
     def __init__(self, capacity):
