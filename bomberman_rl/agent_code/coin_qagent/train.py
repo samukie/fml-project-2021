@@ -119,8 +119,22 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 100,
-        e.INVALID_ACTION: -50
+        e.MOVED_LEFT : -1, # takes shortest path to the next task
+        e.MOVED_RIGHT : -1,
+        e.MOVED_UP : -1,
+        e.MOVED_DOWN : -1,
+        e.WAITED : -5, # only wait if it is worth it
+        e.INVALID_ACTION: -9000, # just dont do it
+        e.BOMB_DROPPED : 0, # dont be unnecessarily aggressive 
+        e.BOMB_EXPLODED : 0,
+        e.CRATE_DESTROYED : 69, # nice
+        e.COIN_FOUND: 1000, # finding coins is nice
+        e.COIN_COLLECTED: 9000, # collecting them is a bliss
+        e.KILLED_OPPONENT : 9000, # there is a grotesque joy in killing other agents  
+        e.KILLED_SELF : -420, # dont be stupid, but keep window open to be tactile
+        e.GOT_KILLED : -420,
+        e.OPPONENT_ELIMINATED : 1000, # it might not have been your killing
+        e.SURVIVED_ROUND : 420 # so it equals out with the accumilated movement rewards
     }
     reward_sum = 0
     for event in events:
