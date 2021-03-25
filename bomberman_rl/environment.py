@@ -368,8 +368,9 @@ class BombeRLeWorld(GenericWorld):
         else:
             for x in range(1,16):
                 for y in range(1,16):
-                    self.coins.append(Coin((x, y)))
-                    self.coins[-1].collectable = True
+                    if self.arena[x, y] == 0:
+                        self.coins.append(Coin((x, y)))
+                        self.coins[-1].collectable = True
 
         # Reset agents and distribute starting positions
         for agent in self.agents:
