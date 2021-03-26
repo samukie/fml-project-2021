@@ -109,8 +109,6 @@ def get_features(namespace, game_state):
     conv_feats += [field]
 
     explosions = game_state["explosion_map"]
-    # if not (explosions==0).all():
-    #     assert False, explosions
     explosions *= -600
     conv_feats += [explosions]
 
@@ -128,7 +126,7 @@ def get_features(namespace, game_state):
     scores_feat = np.zeros((namespace.board_size, namespace.board_size))
 
     my_agent_pos = game_state["self"][-1]
-    agents_feat[my_agent_pos[0], my_agent_pos[1]] = -10  # WAIT penalty
+    agents_feat[my_agent_pos[0], my_agent_pos[1]] = -10  # hint at WAIT penalty?
     scores_feat[my_agent_pos[0], my_agent_pos[1]] = game_state["self"][1]
 
     self_bomb = game_state["self"][-2]
@@ -155,13 +153,14 @@ def get_features(namespace, game_state):
     # add something to every feature to prevent slice of tensor being all 0 (problematic in fwd)
     shape = scores_feat.shape
     eps = 1e-3
-    for feat in conv_feats:
-        noise = np.random.rand(*shape) * eps
-        feat = feat.astype(noise.dtype)
-        feat += noise
+    # for feat in conv_feats:
+    #     noise = np.random.rand(*shape) * eps
+    #     feat = feat.astype(noise.dtype)
+    #     feat += noise
 
     features = np.concatenate([feat[np.newaxis, :, :] for feat in conv_feats], axis=0)
     # features = np.concatenate([field[np.newaxis, :, :] for _ in range(6)])
+
     assert (
         features.shape[0] == namespace.num_features
     ), f"Correct feature size: {features.shape[0]}, instead of {namespace.num_features}"
@@ -190,45 +189,46 @@ def setup(self):
 
     # NOTE: per task:  EDIT to allow/disallow actions; see final_project.pdf
     self.action_dict = {
-        0: "LEFT",
-        1: "RIGHT",
-        2: "UP",
-        3: "DOWN",
-        # 4:'BOMB', # disallow these for coin agent
-        # 5:'WAIT',
+        0:"LEFT",
+        1:"RIGHT",
+        2:"UP",
+        3:"DOWN",
+        4:'BOMB', # disallow these for coin agent
+        5:'WAIT',
     }
     self.num_features = 6  # determine by looking at get_features()
     self.num_actions = len(self.action_dict)  # model outputs int to index action_dict
 
-    self.model_path = MODELS + "my-saved-model.pt"
+    typ = "Conv"
+    self.model_path = MODELS + typ + ".pt"
 
     if not os.path.isfile(self.model_path):
         self.logger.info("Setting up model from scratch.")
 
-        # self.model = ActorCriticLinear(
-        #     num_states=self.num_features,
-        #     num_actions=self.num_actions,
-        #     gamma=0.99,
-        # )
-
-        # self.model = ActorCriticConv(
-        #     in_channels=self.num_features,
-        #     board_size=self.board_size,
-        #     num_actions=self.num_actions,
-        #     gamma=0.99,
-        # )
-
-        num_heads = 2
-
-        self.model = ActorCriticTransformer(
-            board_size=self.board_size,
-            num_states=self.num_features,
-            num_actions=self.num_actions,
-            hidden_dim=num_heads * self.board_size,
-            num_heads=num_heads,
-            mlp_dim=self.board_size * num_heads * 2,
-            num_layers=2,
-        )
+        if typ == "Linear":
+            self.model = ActorCriticLinear(
+                num_states=self.num_features,
+                num_actions=self.num_actions,
+                gamma=0.99,
+            )
+        elif typ == "Conv":
+            self.model = ActorCriticConv(
+                in_channels=self.num_features,
+                board_size=self.board_size,
+                num_actions=self.num_actions,
+                gamma=0.99,
+            )
+        elif typ == "Transformer":
+            num_heads = 2
+            self.model = ActorCriticTransformer(
+                board_size=self.board_size,
+                num_states=self.num_features,
+                num_actions=self.num_actions,
+                hidden_dim=num_heads * self.board_size,
+                num_heads=num_heads,
+                mlp_dim=self.board_size * num_heads * 2,
+                num_layers=2,
+            )
 
         self.logger.info("Successfully set up model:")
         self.logger.info(self.model)

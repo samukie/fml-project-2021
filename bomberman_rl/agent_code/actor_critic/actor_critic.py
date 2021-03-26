@@ -23,9 +23,12 @@ class ActorCritic(nn.Module):
         num_actions=1,
         gamma=0.99,
         eps=1e-7,
+        sam_mult=10000,
         **kwargs,
     ):
         super(ActorCritic, self).__init__()
+
+        self.samuels_multiplier = sam_mult
 
         # action & reward buffers
         self.saved_actions = []
@@ -84,10 +87,18 @@ class ActorCritic(nn.Module):
         action = m.sample()
 
         # save to action buffer
-        self.saved_actions.append(SavedAction(m.log_prob(action), state_value))
+        self.saved_actions.append(SavedAction(m.log_prob(action), state_value[0]))
 
         # the action to take (left or right)
         return action.item()
+
+    def reward(self, r):
+        # R = r*self.samuels_multiplier
+        mult = 1000
+        R = r* mult
+
+        self.episode_rewards.append(R)
+        self.episode_reward += R
 
     def update(self, optimizer):
         """
@@ -243,12 +254,12 @@ class ActorCriticConv(ActorCritic):
 
         for actor_channel in actor_channels:
             actor_layers += [
-                nn.Conv2d(actor_prev_channel, actor_channel),
+                nn.Conv2d(actor_prev_channel, actor_channel, 5),
                 nn.ReLU6(),
             ]
             actor_prev_channel = actor_channel
 
-        flattened_dim = board_size * in_channels  # TODO determine by running model
+        flattened_dim = 75  # TODO determine by running model
         actor_layers += [
             nn.Flatten(1),
             nn.Linear(flattened_dim, num_actions),
@@ -259,8 +270,9 @@ class ActorCriticConv(ActorCritic):
 
         # --------------- CRITIC -----------------
 
+        # TODO rename to hiddens
         critic_layers = []
-        critic_prev_channel = state_dim
+        critic_prev_channel = board_size
 
         for critic_channel in critic_channels:
             critic_layers += [
@@ -289,9 +301,9 @@ class ActorCriticTransformer(ActorCritic):
         hidden_dim,
         num_heads,
         mlp_dim,
-        num_layers=3,
-        critic_hiddens=[17 * 4, 17 * 2, 9],
-        dropout=0.1,
+        num_layers=2,
+        critic_hiddens=[9],
+        dropout=0.08,
         gamma=0.99,
         **kwargs,
     ):
@@ -299,6 +311,7 @@ class ActorCriticTransformer(ActorCritic):
         super(ActorCriticTransformer, self).__init__(
             num_actions=num_actions,
             gamma=gamma,
+            **kwargs
         )
 
         # --------------- ENCODER --------------
