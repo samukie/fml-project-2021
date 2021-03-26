@@ -1,9 +1,9 @@
+import operator
 import os
 import pickle
 import random
-import operator
-import numpy as np
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,18 +16,78 @@ torch.manual_seed(4269420)
 
 MODELS = "models/"
 
-ACTIONS = ['UP', 'RIGHT', 'DOWN', 'LEFT']
+ACTIONS = ["UP", "RIGHT", "DOWN", "LEFT"]
 
 # ------------------ HELPER functions ---------------------
 
+
+def look_for_targets(free_space, start, targets, logger=None):
+    """
+    Find direction of closest target that can be reached via free tiles.
+
+    Performs a breadth-first search of the reachable free tiles until a target is encountered.
+    If no target can be reached, the path that takes the agent closest to any target is chosen.
+
+    Args:
+        free_space: Boolean numpy array. True for free tiles and False for obstacles.
+        start: the coordinate from which to begin the search.
+        targets: list or array holding the coordinates of all target tiles.
+        logger: optional logger object for debugging.
+    Returns:
+        coordinate of first step towards closest target or towards tile closest to any target.
+    """
+    if len(targets) == 0:
+        return None
+
+    frontier = [start]
+    parent_dict = {start: start}
+    dist_so_far = {start: 0}
+    best = start
+    best_dist = np.sum(np.abs(np.subtract(targets, start)), axis=1).min()
+
+    while len(frontier) > 0:
+        current = frontier.pop(0)
+        # Find distance from current position to all targets, track closest
+        d = np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
+        if d + dist_so_far[current] <= best_dist:
+            best = current
+            best_dist = d + dist_so_far[current]
+        if d == 0:
+            # Found path to a target's exact position, mission accomplished!
+            best = current
+            break
+        # Add unexplored free neighboring tiles to the queue in a random order
+        x, y = current
+        neighbors = [
+            (x, y)
+            for (x, y) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+            if free_space[x, y]
+        ]
+        shuffle(neighbors)
+        for neighbor in neighbors:
+            if neighbor not in parent_dict:
+                frontier.append(neighbor)
+                parent_dict[neighbor] = current
+                dist_so_far[neighbor] = dist_so_far[current] + 1
+    if logger:
+        logger.debug(f"Suitable target found at {best}")
+    # Determine the first step towards the best found target tile
+    current = best
+    while True:
+        if parent_dict[current] == start:
+            return current
+        current = parent_dict[current]
+
+
 def get_minimum(current, targets, board_size):
-    if targets == []: 
+    if targets == []:
         return -1
     else:
         return np.argmin(np.sum(np.abs(np.subtract(targets, current)), axis=1))
 
+
 def get_minimum_distance(current, targets, board_size):
-    if targets == []: 
+    if targets == []:
         return False
     else:
         return np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
@@ -35,74 +95,79 @@ def get_minimum_distance(current, targets, board_size):
 
 def get_features(namespace, game_state):
     # ------------------ FEATURE ENGINEERING HERE ---------------------
-    # assert False, game_state
 
-    # 1st feat: 4 neighboring fields empty or not
-
-    # _, _, _, (x, y) = game_state['self']
-    # arena = game_state['field']
-    # directions = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-    # binary = ''
-    # for index, direction in enumerate(directions): 
-    #     if arena[directions[index]] == 0:
-    #         binary += '1'
-    #     else: 
-    #         binary += '0'
-
-    # to_decimal = 0 
-    # for index, digit in enumerate(binary[len(binary)::-1]):
-    #     to_decimal += int(digit)*2**(index)
-
-    # feat1 = np.array([to_decimal])
-
-    # # 2nd feats: nearest x, y coins
-
-    # # observation
-    # current = (x,y)
-
-    # min_coin_index =  get_minimum(current, game_state['coins'], namespace.board_size)
-
-    # if min_coin_index == -1:
-    #     feat2 = np.array([10000, 10000])
-    # else:
-    #     min_coin = game_state['coins'][min_coin_index]
-    #     feat2 = np.array([x-min_coin[0], y-min_coin[1]])
-    # features = np.concatenate([feat1, feat2])
+    # IDEA:
+    # structure: np.array: feats x board x board
+    # use entire gamestate,
+    # making stuff we dont like negative and stuff we like positive
+    # with magnitude indicating importance/expected reward
 
     conv_feats = []
-    conv_feats += [game_state["field"]]
-    conv_feats += [game_state["explosion_map"]]
-    
+
+    field = game_state["field"]
+    field *= 10
+    conv_feats += [field]
+
+    explosions = game_state["explosion_map"]
+    # if not (explosions==0).all():
+    #     assert False, explosions
+    explosions *= -600
+    conv_feats += [explosions]
+
     coin_feat = np.zeros((namespace.board_size, namespace.board_size))
     for coin in game_state["coins"]:
-        coin_feat[coin[0], coin[1]] = 1
+        coin_feat[coin[0], coin[1]] = 50
     conv_feats += [coin_feat]
 
     bomb_feat = np.zeros((namespace.board_size, namespace.board_size))
     for bomb in game_state["bombs"]:
-        bomb_feat[bomb[0], bomb[1]] = 1
+        bomb_feat[bomb[0], bomb[1]] = -200
     conv_feats += [bomb_feat]
 
     agents_feat = np.zeros((namespace.board_size, namespace.board_size))
     scores_feat = np.zeros((namespace.board_size, namespace.board_size))
 
-    agent_idx = 7
     my_agent_pos = game_state["self"][-1]
-    agents_feat[my_agent_pos[0], my_agent_pos[1]] = agent_idx 
-    scores_feat[my_agent_pos[0], my_agent_pos[1]] = game_state["self"][1] 
+    agents_feat[my_agent_pos[0], my_agent_pos[1]] = -10  # WAIT penalty
+    scores_feat[my_agent_pos[0], my_agent_pos[1]] = game_state["self"][1]
 
-    for (other_score, other_bomb, other_pos) in [other[1:] for other in game_state["others"]]:
-        agent_idx += 2
-        agents_feat[other_pos[0], other_pos[1]] = agent_idx
+    self_bomb = game_state["self"][-2]
+
+    for (other_score, other_bomb, other_pos) in [
+        other[1:] for other in game_state["others"]
+    ]:
+        # determine based on availability of self+other's reward for getting to agent
+        if self_bomb and other_bomb:
+            agent_reward = 10
+        elif self_bomb and not other_bomb:
+            agent_reward = 60
+        elif not self_bomb and other_bomb:
+            agent_reward = -60
+        elif not self_bomb and not other_bomb:
+            agent_reward = 10
+
+        agents_feat[other_pos[0], other_pos[1]] = agent_reward
         scores_feat[other_pos[0], other_pos[1]] = other_score
 
     conv_feats += [agents_feat]
     conv_feats += [scores_feat]
 
-    features = np.concatenate([feat[np.newaxis,:,:] for feat in conv_feats], axis=0)
-    assert features.shape[0] == namespace.num_features, f"Correct feature size: {features.shape[0]}, instead of {namespace.num_features}"
+    # add something to every feature to prevent slice of tensor being all 0 (problematic in fwd)
+    shape = scores_feat.shape
+    eps = 1e-3
+    for feat in conv_feats:
+        noise = np.random.rand(*shape) * eps
+        feat = feat.astype(noise.dtype)
+        feat += noise
+
+    features = np.concatenate([feat[np.newaxis, :, :] for feat in conv_feats], axis=0)
+    # features = np.concatenate([field[np.newaxis, :, :] for _ in range(6)])
+    assert (
+        features.shape[0] == namespace.num_features
+    ), f"Correct feature size: {features.shape[0]}, instead of {namespace.num_features}"
 
     return np.expand_dims(features, 0)
+
 
 def setup(self):
     """
@@ -123,21 +188,21 @@ def setup(self):
 
     self.board_size = 17
 
-    # NOTE: per task:  EDIT to allow/disallow actions; see final_project.pdf 
+    # NOTE: per task:  EDIT to allow/disallow actions; see final_project.pdf
     self.action_dict = {
-        0:'LEFT',
-        1:'RIGHT',
-        2:'UP',
-        3:'DOWN',
+        0: "LEFT",
+        1: "RIGHT",
+        2: "UP",
+        3: "DOWN",
         # 4:'BOMB', # disallow these for coin agent
         # 5:'WAIT',
     }
-    self.num_features = 6 # determine by looking at get_features()
-    self.num_actions = len(self.action_dict) # model outputs int to index action_dict
+    self.num_features = 6  # determine by looking at get_features()
+    self.num_actions = len(self.action_dict)  # model outputs int to index action_dict
 
-    self.model_path = MODELS+"my-saved-model.pt"
+    self.model_path = MODELS + "my-saved-model.pt"
 
-    if os.path.isfile(self.model_path):
+    if not os.path.isfile(self.model_path):
         self.logger.info("Setting up model from scratch.")
 
         # self.model = ActorCriticLinear(
@@ -145,7 +210,7 @@ def setup(self):
         #     num_actions=self.num_actions,
         #     gamma=0.99,
         # )
-    
+
         # self.model = ActorCriticConv(
         #     in_channels=self.num_features,
         #     board_size=self.board_size,
@@ -159,20 +224,19 @@ def setup(self):
             board_size=self.board_size,
             num_states=self.num_features,
             num_actions=self.num_actions,
-            hidden_dim=num_heads*self.board_size,
+            hidden_dim=num_heads * self.board_size,
             num_heads=num_heads,
-            mlp_dim=self.board_size*num_heads*2,
+            mlp_dim=self.board_size * num_heads * 2,
             num_layers=2,
         )
 
         self.logger.info("Successfully set up model:")
         self.logger.info(self.model)
-        
+
     else:
         self.logger.info("Loading model from saved state.")
         with open(self.model_path, "rb") as file:
             self.model = pickle.load(file)
-    
 
 
 def act(self, game_state: dict) -> str:
@@ -185,10 +249,9 @@ def act(self, game_state: dict) -> str:
     :return action_str: The action to take as a string.
     """
     features = get_features(self, game_state)
-    
+
     action = self.model.select_action(features)
 
     action_str = self.action_dict[action]
 
     return action_str
-
