@@ -1,0 +1,24 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "module",
+            "type": "python",
+            "request": "launch",
+            "program": "bomberman_rl/main.py",
+            "args": [
+                "play",
+                "--agent",
+                "torch_d_qagent",
+                "--train",
+                "1",
+                "--no-gui",
+                "--n-rounds",
+                "100"
+            ]
+        }
+    ]
+}

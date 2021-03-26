@@ -17,6 +17,7 @@ def get_minimum(current, targets, board_size):
         return np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
 
 def get_observation_and_action(self, game_state):
+    print(game_state)
     arena = game_state['field']
     _, score, bombs_left, (x, y) = game_state['self']
     current = (x,y)
