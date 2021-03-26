@@ -7,6 +7,70 @@ from .DQN import *
 
 ACTIONS = ['LEFT', 'RIGHT', 'UP', 'DOWN', "WAIT", "BOMB"] 
 
+def get_minimum(current, targets, board_size):
+    #print(targets)
+    if targets == []: 
+        return -1
+    else:
+        return np.argmin(np.sum(np.abs(np.subtract(targets, current)), axis=1))
+
+def get_minimum_distance(current, targets, board_size):
+    if targets == []: 
+        return False
+    else:
+        return np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
+
+def get_environment(game_state):
+    _, _, _, (x, y) = game_state['self']
+    arena = game_state['field']
+    # bomb = 2
+    for bomb in game_state["bombs"]:
+        arena[bomb[0][0], bomb[0][1]] = 2
+    # coins = 3    
+    for coin in game_state["coins"]:
+        arena[coin[0], coin[1]] = 3
+    # self = 4 
+    arena[game_state["self"][3][0], game_state["self"][3][1]] = 4
+    #print(game_state)
+    # explosion awareness
+    explosions = game_state["explosion_map"].nonzero()
+    arena[explosions] = 5
+    # return one hot encoding
+    return torch.from_numpy(arena).view(1,arena.shape[0]*arena.shape[1])
+
+def get_coin_representation(coin_coordinate):
+    decimal = coin_coordinate[0]*19**0 + coin_coordinate[1]*19**1
+    return decimal
+
+def get_action_and_observation(self, game_state):
+    
+    arena = game_state['field']
+    _, score, bombs_left, (x, y) = game_state['self']
+    current = (x,y)
+    # observation
+
+    surrounding = get_environment(game_state)
+    valid_actions = ['LEFT', 'RIGHT', 'UP', 'DOWN', "WAIT", "BOMB"] 
+    min_coin_index =  get_minimum(current, game_state['coins'], self.board_size)
+    # exploration
+    state = get_environment(game_state)
+    if np.random.random() > 0.1:
+        # Get action from Q table
+        
+        #best_action = np.argmax(self.policy_net.([1,coin_decimal, surrounding]))
+        #print("best action!!!! ", torch.argmax(self.policy_net(torch.FloatTensor(state))))
+        #best_action = self.policy_net(torch.FloatTensor(state)).max(1)[1].view(1, 1)
+        #print('actions', self.policy_net(torch.FloatTensor(state))
+        #print(self.policy_net.shape)
+        #print(state.shape)
+        best_action = torch.argmax(self.policy_net(state.float()))
+        #print("BESR", best_action)
+    else:
+        # Get random action
+        best_action = torch.as_tensor(np.random.randint(0, len(ACTIONS)))
+    #print(best_action)
+    return best_action, state
+
 
 def setup(self):
     """
@@ -22,21 +86,23 @@ def setup(self):
 
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
-    agent_dir = 'agent_code/qagent/'
+    #agent_dir = 'agent_code/qagent/'
     if self.train or not os.path.isfile("my-saved-model.pt"):
         self.logger.info("Setting up model from scratch.")
         #weights = np.random.rand(len(ACTIONS))
         #self.model = weights / weights.sum()
-        """
+        board_size = 17
+        
         n_actions = len(ACTIONS)
-        self.policy_net = DQN(10, 64, n_actions).to(device)
-        self.target_net = DQN(10, 64, n_actions).to(device)
+        self.policy_net = DQN(board_size*board_size,32, n_actions).to(device)
+        self.target_net = DQN(board_size*board_size,32, n_actions).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
+        print('constructed')
         """
         n_actions = len(ACTIONS)
-        self.policy_net = DQN(10, 64, n_actions).to(device)
-        self.target_net = DQN(10, 64, n_actions).to(device)
+        self.policy_net = DQN(board_size*board_size,120, n_actions).to(device)
+        self.target_net = DQN(board_size*board_size,120, n_actions).to(device)
 
         self.policy_net.load_state_dict(torch.load("policy_net.pt"))
         self.target_net.load_state_dict(torch.load("target_net.pt"))
@@ -44,7 +110,7 @@ def setup(self):
         self.policy_net.eval()
         self.target_net.eval()
         print('contructed')
-        
+        """
         
     else:
         self.logger.info("Loading model from saved state.")
@@ -54,8 +120,9 @@ def setup(self):
             #self.policy_net = DQN(screen_height, screen_width, n_actions).to(device)
             #self.target_net = DQN(screen_height, screen_width, n_actions).to(device)
             n_actions = len(ACTIONS)
-            self.policy_net = DQN(10, 64, n_actions).to(device)
-            self.target_net = DQN(10, 64, n_actions).to(device)
+            board_size=17
+            self.policy_net = DQN(board_size*board_size,32, n_actions).to(device)
+            self.target_net = DQN(board_size*board_size,32, n_actions).to(device)
 
             self.policy_net.load_state_dict(torch.load("policy_net.pt"))
             self.target_net.load_state_dict(torch.load("target_net.pt"))
@@ -63,8 +130,6 @@ def setup(self):
             self.policy_net.eval()
             self.target_net.eval()
             print('loaded')
-    self.target = False
-    self.bomb_target = False
     self.board_size = 17
     self.action_dict = {
         0:'LEFT',
@@ -74,62 +139,6 @@ def setup(self):
         4:'WAIT',
         5:'BOMB'
     }
-
-def get_minimum(current, targets, board_size):
-    #print(targets)
-    if targets == []: 
-        return -1
-    else:
-        return np.argmin(np.sum(np.abs(np.subtract(targets, current)), axis=1))
-
-def get_minimum_distance(current, targets, board_size):
-    if targets == []: 
-        return False
-    else:
-        return np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
-
-def get_distance(current, target, board_size):
-    return np.sum(np.abs(np.subtract(target, current)))
-
-def target_is_valid(target, game_state): 
-    is_valid = False
-    for coin in game_state['coins']:
-        if coin[0]==target[0] and coin[1]==target[1]:
-            is_valid=True
-    return is_valid
-
-def get_coin_representation(coin_coordinate):
-    decimal = coin_coordinate[0]*19**0 + coin_coordinate[1]*19**1
-    return decimal
-
-def get_action_and_observation(self, game_state):
-    _, _, _, (x, y) = game_state['self']
-    current = (x,y)
-    arena = game_state['field']
-    # update target
-    # if 
-    bombs = [0,0]
-    if game_state['bombs'] != []:
-        bombs[0] = game_state['bombs'][0][0][0]
-        bombs[1] = game_state['bombs'][0][0][1]
-        self.bomb_target = bombs
-    else: 
-        self.bomb_target = False
-    if self.target: 
-        if not target_is_valid(self.target, game_state):
-            self.target=False
-    if not self.target and not self.bomb_target:
-        if not game_state['coins']==[]:
-            self.target =  game_state['coins'][get_minimum(current, game_state['coins'], self.board_size)]
-    #print(self.target)
-    state = [x,y,arena[x+1, y], arena[x-1, y], arena[x, y+1], arena[x, y-1], bombs[0], bombs[1]]
-    if np.random.random() > 0.01 and self.target:
-        state.extend([self.target[0],self.target[1]])
-        best_action = torch.argmax(self.policy_net(torch.FloatTensor(state)))
-    else:
-        state.extend([0,0])
-        best_action = torch.as_tensor(np.random.randint(0, len(ACTIONS)))
-    return best_action, state
 
 def act(self, game_state: dict) -> str:
     """
@@ -141,9 +150,12 @@ def act(self, game_state: dict) -> str:
     :return: The action to take as a string.
     """
     action, _ = get_action_and_observation(self, game_state)
-    #print(self.action_dict[action.item()])
+    #print(action)
+    #print(action.shape)
     return  self.action_dict[action.item()]
 
+def get_distance(current, target, board_size):
+    return np.sum(np.abs(np.subtract(target, current)))
 
 def state_to_features(game_state: dict) -> np.array:
     """
