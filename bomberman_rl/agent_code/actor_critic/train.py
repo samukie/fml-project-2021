@@ -316,7 +316,6 @@ def reward_from_events(self, events: List[str]) -> int:
     return reward_sum
 
 
-
 def end_of_round(self, last_game_state: dict, last_action: str, events: List[str]):
     """
     Called at the end of each game or when the agent died to hand out final rewards.

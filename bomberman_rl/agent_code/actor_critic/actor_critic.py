@@ -197,7 +197,10 @@ class ActorCriticLinear(ActorCritic):
             ]
             actor_prev_hidden = actor_hidden
 
-        actor_layers += [nn.Linear(actor_prev_hidden, num_actions), nn.Softmax(dim=-1)]
+        actor_layers += [
+            nn.Linear(actor_prev_hidden, num_actions), 
+            nn.Softmax(dim=-1)
+        ]
 
         self._action_head = nn.Sequential(*actor_layers)
 
@@ -231,7 +234,7 @@ class ActorCriticConv(ActorCritic):
         num_actions,
         in_channels,
         actor_channels=[7, 5, 3],
-        critic_channels=[7, 5, 5],
+        critic_channels=[7, 5, 3],
         dropout=0.2,
         gamma=0.99,
         **kwargs,
@@ -259,7 +262,7 @@ class ActorCriticConv(ActorCritic):
             ]
             actor_prev_channel = actor_channel
 
-        flattened_dim = 75  # TODO determine by running model
+        flattened_dim = 75 # TODO determine by running model
         actor_layers += [
             nn.Flatten(1),
             nn.Linear(flattened_dim, num_actions),
@@ -272,17 +275,21 @@ class ActorCriticConv(ActorCritic):
 
         # TODO rename to hiddens
         critic_layers = []
-        critic_prev_channel = board_size
+        critic_prev_channel = state_dim
 
         for critic_channel in critic_channels:
             critic_layers += [
-                nn.Linear(critic_prev_channel, critic_channel),
+                nn.Conv2d(critic_prev_channel, critic_channel, 5),
                 nn.ReLU6(),
             ]
             critic_prev_channel = critic_channel
 
+        flattened_critic_dim = 75
         critic_layers += [
-            nn.Linear(critic_prev_channel, 1),
+            nn.Flatten(1),
+            nn.Linear(flattened_critic_dim, 25),
+            nn.ReLU6(),
+            nn.Linear(25,1)
         ]
 
         self._value_head = nn.Sequential(*critic_layers)
@@ -332,7 +339,10 @@ class ActorCriticTransformer(ActorCritic):
             dropout=dropout,
             emb_dropout=dropout,
         )
-        self._action_head = nn.Sequential(actor, nn.Sigmoid())
+        self._action_head = nn.Sequential(
+            actor, 
+            nn.Softmax(dim=-1)
+        )
 
         # --------------- CRITIC -----------------
 
