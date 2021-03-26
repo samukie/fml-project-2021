@@ -148,8 +148,8 @@ def reward_from_events(self, events: List[str]) -> int:
         e.BOMB_DROPPED : 0, # dont be unnecessarily aggressive 
         e.BOMB_EXPLODED : 0,
         e.CRATE_DESTROYED : 69, # nice
-        e.COIN_FOUND: 1000, # finding coins is nice
-        e.COIN_COLLECTED: 9000, # collecting them is a bliss
+        e.COIN_FOUND: 100, # finding coins is nice
+        e.COIN_COLLECTED: 420, # collecting them is a bliss
         e.KILLED_OPPONENT : 9000, # there is a grotesque joy in killing other agents  
         e.KILLED_SELF : -420, # dont be stupid, but keep window open to be tactile
         e.GOT_KILLED : -420,
