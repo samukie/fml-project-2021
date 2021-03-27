@@ -160,9 +160,15 @@ def setup_training(self):
 
     if torch.cuda.is_available():
         device = "cuda"
-        self.model.to(device)
         self.model._dev = device
+
+        self.model.to(device)
         optimizer_to(self.optimizer, device)
+    else:
+        device = "cpu"
+        self.model._dev = device
+
+    print(f"Starting to train on {device} ...")
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -205,7 +211,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             for made_move in events:
                 if made_move in MOVES:
                     break
-            
+
             if made_move is not None:
 
                 approach_made = reward_moving_closer_breadth_first(free_space, start, targets, made_move, logger=None)
@@ -283,7 +289,7 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
 
-    # NOTE: design rewards here:
+    # NOTE: design initial rewards here:
     game_rewards = {
 
         e.MOVED_LEFT : -5,
@@ -329,6 +335,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     :param self: The same object that is passed to all of your callbacks.
     """
+
     self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
 
     # ------------------------ finalize model reward -------------------------

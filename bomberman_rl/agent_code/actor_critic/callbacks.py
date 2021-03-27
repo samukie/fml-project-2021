@@ -92,6 +92,30 @@ def get_minimum_distance(current, targets, board_size):
     else:
         return np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
 
+def random_dieder4(arr, axes=(2,3)):
+    # applies random flips and rotations along plane specified by given axes on a numpy array
+
+    if len(arr.shape) == 2:
+        axes = (0,1)
+    assert len(axes) == 2, "need unambiguous plane to do transforms on"
+
+    flip_axis = random.choice(axes)
+    num_flip = random.choice([0,1])
+    num_rot = random.choice([0,1,2,3])
+
+    # flip
+    if num_flip:
+        arr = np.flip(arr, axis=flip_axis)
+
+    # rotate
+    arr = np.rot90(arr, num_rot, axes=axes)
+    return arr
+
+
+
+
+    pass
+
 
 def get_features(namespace, game_state):
     # ------------------ FEATURE ENGINEERING HERE ---------------------
@@ -150,9 +174,11 @@ def get_features(namespace, game_state):
     conv_feats += [agents_feat]
     conv_feats += [scores_feat]
 
-    # add something to every feature to prevent slice of tensor being all 0 (problematic in fwd)
-    shape = scores_feat.shape
-    eps = 1e-3
+    # add noise to all features to prevent slice of tensor being all 0
+    # (i think this was problematic in fwd)
+
+    # shape = scores_feat.shape
+    # eps = 1e-3
     # for feat in conv_feats:
     #     noise = np.random.rand(*shape) * eps
     #     feat = feat.astype(noise.dtype)
@@ -165,7 +191,13 @@ def get_features(namespace, game_state):
         features.shape[0] == namespace.num_features
     ), f"Correct feature size: {features.shape[0]}, instead of {namespace.num_features}"
 
-    return np.expand_dims(features, 0)
+    # add batch dim because transformer expects it:
+    features = np.expand_dims(features, 0) # 1 x FEAT x BOARD x BOARD
+
+    # randomly flip+rotate for better generalization:
+    features = random_dieder4(arr, axes=(2,3))
+
+    return features
 
 
 def setup(self):

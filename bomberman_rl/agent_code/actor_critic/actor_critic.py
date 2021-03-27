@@ -134,7 +134,7 @@ class ActorCritic(nn.Module):
             policy_losses.append(-log_prob * advantage)
 
             # calculate critic (value) loss using L1 smooth loss
-            value_losses.append(F.smooth_l1_loss(value, torch.tensor([R])))
+            value_losses.append(F.smooth_l1_loss(value, torch.tensor([R]).to(device=self._dev)))
 
         # reset gradients
         optimizer.zero_grad()
