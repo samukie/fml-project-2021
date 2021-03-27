@@ -161,6 +161,7 @@ def setup_training(self):
     if torch.cuda.is_available():
         device = "cuda"
         self.model.to(device)
+        self.model._dev = device
         optimizer_to(self.optimizer, device)
 
 

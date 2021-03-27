@@ -1,0 +1,7 @@
+[W NNPACK.cpp:80] Could not initialize NNPACK! Reason: Unsupported hardware.
+srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+srun: got SIGCONT
+slurmstepd: *** JOB 418620 ON node33 CANCELLED AT 2021-03-27T03:42:43 ***
+srun: forcing job termination
+slurmstepd: *** STEP 418620.0 ON node33 CANCELLED AT 2021-03-27T03:42:43 ***
+srun: error: node33: task 0: Terminated

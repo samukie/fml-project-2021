@@ -75,7 +75,7 @@ class ActorCritic(nn.Module):
         return action_prob, state_values
 
     def select_action(self, state):
-        state = torch.from_numpy(state).float()
+        state = torch.from_numpy(state).float().to(device=self._dev)
         probs, state_value = self(state)
 
         # create a categorical distribution over the list of probabilities of actions
@@ -94,8 +94,8 @@ class ActorCritic(nn.Module):
 
     def reward(self, r):
         # R = r*self.samuels_multiplier
-        mult = 1000
-        R = r* mult
+        mult = 10
+        R = r * mult
 
         self.episode_rewards.append(R)
         self.episode_reward += R
