@@ -164,11 +164,8 @@ def setup_training(self):
 
         self.model.to(device)
         optimizer_to(self.optimizer, device)
-    else:
-        device = "cpu"
-        self.model._dev = device
-
-    print(f"Starting to train on {device} ...")
+    
+    print(f"Starting to train on {self.model._dev} ...")
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -365,9 +362,11 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     self.i_episode += 1
 
+    # reset current_action_dict
+    self.current_action_dict = deepcopy(self.action_dict)
+
     print("storing model at "+self.model_path)
     # Store the model
     # TODO only if its best ? torch.save? ckpt dict mit model/episode/...
-    with open(self.model_path, "wb") as file:
-        pickle.dump(self.model, file)
+    torch.save(self.model, self.model_path)
 

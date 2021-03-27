@@ -2,6 +2,7 @@ import operator
 import os
 import pickle
 import random
+from copy import deepcopy
 
 import numpy as np
 import torch
@@ -94,30 +95,52 @@ def get_minimum_distance(current, targets, board_size):
 
 def random_dieder4(arr, axes=(2,3)):
     # applies random flips and rotations along plane specified by given axes on a numpy array
+    # tracks where moves should go 
 
     if len(arr.shape) == 2:
         axes = (0,1)
     assert len(axes) == 2, "need unambiguous plane to do transforms on"
+    assert axes[0] != axes[1]
+
+    # track moving actions on 3x3 grid to recover 
+    move_map = np.zeros((3,3))
+    LEFT, RIGHT, UP, DOWN = (1,0), (1,2), (0,1), (2,1)
+    directions = [LEFT, RIGHT, UP, DOWN]
+
+    move_map[LEFT[0], LEFT[1]] = 0
+    move_map[RIGHT[0], RIGHT[1]] = 1
+    move_map[UP[0], UP[1]] = 2
+    move_map[DOWN[0], DOWN[1]] = 3
+
+    # do transformations:
 
     flip_axis = random.choice(axes)
     num_flip = random.choice([0,1])
+
     num_rot = random.choice([0,1,2,3])
 
     # flip
     if num_flip:
         arr = np.flip(arr, axis=flip_axis)
+        move_map = np.flip(move_map, axis=0 if flip_axis==axes[0] else 1)
 
     # rotate
     arr = np.rot90(arr, num_rot, axes=axes)
-    return arr
+    move_map = np.rot90(move_map, num_rot, axes=(0,1))
+
+    arr = arr.copy() # avoid torch stride bug
+
+    print("move_map:", move_map)
+
+    move_dict = {i: int(move_map[direction[0],direction[1]]) for i, direction in enumerate(directions)}
+
+    return arr, move_dict
 
 
 
 
-    pass
 
-
-def get_features(namespace, game_state):
+def get_features(self, game_state):
     # ------------------ FEATURE ENGINEERING HERE ---------------------
 
     # IDEA:
@@ -136,18 +159,18 @@ def get_features(namespace, game_state):
     explosions *= -600
     conv_feats += [explosions]
 
-    coin_feat = np.zeros((namespace.board_size, namespace.board_size))
+    coin_feat = np.zeros((self.board_size, self.board_size))
     for coin in game_state["coins"]:
         coin_feat[coin[0], coin[1]] = 50
     conv_feats += [coin_feat]
 
-    bomb_feat = np.zeros((namespace.board_size, namespace.board_size))
+    bomb_feat = np.zeros((self.board_size, self.board_size))
     for bomb in game_state["bombs"]:
         bomb_feat[bomb[0], bomb[1]] = -200
     conv_feats += [bomb_feat]
 
-    agents_feat = np.zeros((namespace.board_size, namespace.board_size))
-    scores_feat = np.zeros((namespace.board_size, namespace.board_size))
+    agents_feat = np.zeros((self.board_size, self.board_size))
+    scores_feat = np.zeros((self.board_size, self.board_size))
 
     my_agent_pos = game_state["self"][-1]
     agents_feat[my_agent_pos[0], my_agent_pos[1]] = -10  # hint at WAIT penalty?
@@ -188,14 +211,24 @@ def get_features(namespace, game_state):
     # features = np.concatenate([field[np.newaxis, :, :] for _ in range(6)])
 
     assert (
-        features.shape[0] == namespace.num_features
-    ), f"Correct feature size: {features.shape[0]}, instead of {namespace.num_features}"
+        features.shape[0] == self.num_features
+    ), f"Correct feature size: {features.shape[0]}, instead of {self.num_features}"
 
     # add batch dim because transformer expects it:
     features = np.expand_dims(features, 0) # 1 x FEAT x BOARD x BOARD
 
-    # randomly flip+rotate for better generalization:
-    features = random_dieder4(arr, axes=(2,3))
+    if self.train:
+        # during training, randomly flip+rotate for better generalization:
+        features, move_dict = random_dieder4(features, axes=(2,3))
+
+        print(move_dict, type(move_dict))
+
+        # need to update corresponding actions (moves)
+        for original_direction, transformed_direction in move_dict.items():
+            self.current_action_dict[original_direction] = self.action_dict[transformed_direction]
+
+        # (during eval, skip this to save time)
+
 
     return features
 
@@ -220,6 +253,8 @@ def setup(self):
     self.board_size = 17
 
     # NOTE: per task:  EDIT to allow/disallow actions; see final_project.pdf
+
+    # EDIT ORDER OF MOVES IN random_dieder4 IF YOU EDIT THIS
     self.action_dict = {
         0:"LEFT",
         1:"RIGHT",
@@ -228,11 +263,15 @@ def setup(self):
         4:'BOMB', # disallow these for coin agent
         5:'WAIT',
     }
+    self.current_action_dict = deepcopy(self.action_dict)
+
     self.num_features = 6  # determine by looking at get_features()
     self.num_actions = len(self.action_dict)  # model outputs int to index action_dict
 
     typ = "Conv"
-    self.model_path = MODELS + typ + ".pt"
+    # no cuda: must try to load cpu model saved on cluster as e.g. Conv_cpu.pt
+    cpu = "_cpu" if not torch.cuda.is_available() else "" 
+    self.model_path = MODELS + typ + cpu + ".pt"
 
     if not os.path.isfile(self.model_path):
         self.logger.info("Setting up model from scratch.")
@@ -270,8 +309,16 @@ def setup(self):
 
     else:
         self.logger.info("Loading model from saved state.")
-        with open(self.model_path, "rb") as file:
-            self.model = pickle.load(file)
+
+        self.model = torch.load(self.model_path, map_location="cpu")
+
+    # initialize device to cpu. this may get updated to cuda in setup_training
+    device = "cpu"
+    self.model._dev = device
+
+    # double check model is training 
+    # (no reason to ever be in eval mode except tiny time saves with batch norm)
+    self.model.train()
 
 
 def act(self, game_state: dict) -> str:
@@ -287,6 +334,6 @@ def act(self, game_state: dict) -> str:
 
     action = self.model.select_action(features)
 
-    action_str = self.action_dict[action]
+    action_str = self.current_action_dict[action]
 
     return action_str
