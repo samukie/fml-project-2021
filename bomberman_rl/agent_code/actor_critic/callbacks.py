@@ -212,11 +212,14 @@ def setup(self):
                 gamma=0.99,
             )
         elif typ == "Conv":
+            channels = [34, 68, 136, 272, 34, 17, 9]
+
             self.model = ActorCriticConv(
                 in_channels=self.num_features,
                 board_size=self.board_size,
                 num_actions=self.num_actions,
-                gamma=0.99,
+                actor_channels=channels,
+                critic_channels=channels,
             )
         elif typ == "Transformer":
             num_heads = 2

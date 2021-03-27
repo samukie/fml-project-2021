@@ -233,8 +233,10 @@ class ActorCriticConv(ActorCritic):
         board_size,  # e.g. 17
         num_actions,
         in_channels,
-        actor_channels=[7, 5, 3],
-        critic_channels=[7, 5, 3],
+        actor_channels=[34, 68, 34, 17, 9],
+        flattened_dim_actor=75, # TODO determine by running model,
+        critic_channels=[34, 68, 34, 17, 9],
+        flattened_dim_critic=75, # TODO determine by running model
         dropout=0.1,
         gamma=0.99,
         **kwargs,
@@ -262,10 +264,9 @@ class ActorCriticConv(ActorCritic):
             ]
             actor_prev_channel = actor_channel
 
-        flattened_dim = 75 # TODO determine by running model
         actor_layers += [
             nn.Flatten(1),
-            nn.Linear(flattened_dim, num_actions),
+            nn.Linear(flattened_dim_actor, num_actions),
             nn.Softmax(dim=-1),
         ]
 
@@ -284,10 +285,9 @@ class ActorCriticConv(ActorCritic):
             ]
             critic_prev_channel = critic_channel
 
-        flattened_critic_dim = 75
         critic_layers += [
             nn.Flatten(1),
-            nn.Linear(flattened_critic_dim, 25),
+            nn.Linear(flattened_dim_critic, 25),
             nn.ReLU6(),
             nn.Linear(25,1)
         ]
