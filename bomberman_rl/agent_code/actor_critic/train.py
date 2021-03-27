@@ -365,6 +365,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     self.i_episode += 1
 
+    print("storing model at "+self.model_path)
     # Store the model
     # TODO only if its best ? torch.save? ckpt dict mit model/episode/...
     with open(self.model_path, "wb") as file:
