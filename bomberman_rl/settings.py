@@ -7,8 +7,7 @@ COLS = 17
 ROWS = 17
 CRATE_DENSITY = 0.20
 MAX_AGENTS = 4
-COIN_OVERFLOW = False
-
+COIN_OVERFLOW = True
 # Round properties
 MAX_STEPS = 400
 
@@ -26,7 +25,7 @@ BOMB_TIMER = 4
 EXPLOSION_TIMER = 2
 
 # Rules for agents
-TIMEOUT = 2.5
+TIMEOUT = 0.5
 REWARD_KILL = 5
 REWARD_COIN = 1
 

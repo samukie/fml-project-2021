@@ -235,7 +235,7 @@ class ActorCriticConv(ActorCritic):
         in_channels,
         actor_channels=[7, 5, 3],
         critic_channels=[7, 5, 3],
-        dropout=0.2,
+        dropout=0.1,
         gamma=0.99,
         **kwargs,
     ):

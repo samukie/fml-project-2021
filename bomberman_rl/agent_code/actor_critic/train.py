@@ -290,7 +290,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_UP : -5,
         e.MOVED_DOWN : -5,
         e.WAITED : -40,
-        e.INVALID_ACTION : -60,
+        e.INVALID_ACTION : -600,
 
         e.BOMB_DROPPED : 0,
         e.BOMB_EXPLODED : 0,
@@ -300,9 +300,9 @@ def reward_from_events(self, events: List[str]) -> int:
         e.COIN_COLLECTED : 120,
 
         e.KILLED_OPPONENT : 433,
-        e.KILLED_SELF : -1000,
+        e.KILLED_SELF : -10000,
 
-        e.GOT_KILLED : -1001,
+        e.GOT_KILLED : -10001,
         e.OPPONENT_ELIMINATED : 333,
         e.SURVIVED_ROUND : 1000,
     }
