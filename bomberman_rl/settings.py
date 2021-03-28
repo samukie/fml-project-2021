@@ -5,9 +5,9 @@ from fallbacks import pygame
 # Game properties
 COLS = 17
 ROWS = 17
-CRATE_DENSITY = 0
+CRATE_DENSITY = 0.2
 MAX_AGENTS = 4
-COIN_OVERFLOW = True
+COIN_OVERFLOW = False
 # Round properties
 MAX_STEPS = 400
 

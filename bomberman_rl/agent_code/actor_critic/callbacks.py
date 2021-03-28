@@ -267,7 +267,7 @@ def setup(self):
     self.num_features = 6  # determine by looking at get_features()
     self.num_actions = len(self.action_dict)  # model outputs int to index action_dict
 
-    typ = "Conv"
+    typ = "ConvRes"
 
     self.optim_type = optim.Adam if typ=="Transformer" else optim.AdamW
 

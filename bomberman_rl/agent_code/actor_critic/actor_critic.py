@@ -91,24 +91,13 @@ class ActorCritic(nn.Module):
         self.eps = eps
 
     def encode(self, x):
-        try:
-            return self._encoder(x)
-        except AttributeError:
-            raise NotImplementedError(f"ActorCritic must implement _encoder")
+        return self._encoder(x)
 
     def actor(self, x):
-        try:
-            return self._action_head(x)
-        except AttributeError as e:
-            input(e)
-
-            raise NotImplementedError(f"ActorCritic must implement _action_head")
+        return self._action_head(x)
 
     def critic(self, x):
-        try:
-            return self._value_head(x)
-        except AttributeError:
-            raise NotImplementedError(f"ActorCritic must implement _value_head")
+        return self._value_head(x)
 
     def forward(self, x):
         """
@@ -236,7 +225,7 @@ class ActorCriticLinear(ActorCritic):
         self._encoder = nn.Sequential(
             nn.Flatten(1),
             nn.Linear(input_dim, state_dim), 
-            nn.ReLU6()
+            # nn.ReLU6()
         )
 
         # --------------- ACTOR -----------------
@@ -308,7 +297,8 @@ class ActorCriticConv(ActorCritic):
         # --------------- ENCODER --------------
 
         self._encoder = nn.Sequential(
-            nn.Conv2d(in_channels, state_dim, kernel_size=1), nn.ReLU6()
+            nn.Conv2d(in_channels, state_dim, kernel_size=1), 
+            # nn.ReLU6()
         )
 
         # --------------- ACTOR -----------------
@@ -385,7 +375,8 @@ class ActorCriticConvRes(ActorCritic):
         # --------------- ENCODER --------------
 
         self._encoder = nn.Sequential(
-            nn.Conv2d(in_channels, state_dim, kernel_size=1), nn.ReLU6()
+            nn.Conv2d(in_channels, state_dim, kernel_size=1), 
+            # nn.ReLU6()
         )
 
         # --------------- ACTOR -----------------

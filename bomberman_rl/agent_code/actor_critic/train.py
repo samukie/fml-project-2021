@@ -160,11 +160,11 @@ def setup_training(self):
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
 
-    self.lr = 1e-2
+    self.lr = 1e-3
     critic_mult = 2
 
     self.optimizer = self.optim_type([
-        {"params": self.model._encoder.parameters(), "lr": self.lr},
+        {"params": self.model._encoder.parameters(), "lr": self.lr * critic_mult},
         {"params": self.model._action_head.parameters(), "lr": self.lr},
         {"params": self.model._value_head.parameters(), "lr": self.lr * critic_mult},
     ])
