@@ -42,6 +42,12 @@ def setup_training(self):
     self.optimizer = optim.RMSprop(self.policy_net.parameters())
     self.memory = ReplayMemory(10000)
     self.transitions = deque(maxlen=TRANSITION_HISTORY_SIZE)
+    self.game =1
+
+def state_is_equal(state1, state2):
+    state1.sort()
+    state2.sort()
+    return state1 == state2
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
     """
@@ -60,19 +66,33 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
     :param new_game_state: The state the agent is in now.
     :param events: The events that occurred when going from  `old_game_state` to `new_game_state`
     """
-
+    
     if old_game_state:
         current_action, current_obs = get_action_and_observation(self, old_game_state)
         next_action, next_obs= get_action_and_observation(self, new_game_state)
         reward = reward_from_events(self, events)
+        reward -= new_game_state['step']
         if self.target: 
             prev_dist =  get_distance(old_game_state['self'][3], self.target, self.board_size)
             curr_dist =  get_distance(new_game_state['self'][3], self.target, self.board_size)
             if curr_dist < prev_dist:
-                reward+=20
+                reward+=1000
             else:
                 if not e.COIN_COLLECTED in events:
-                    reward-=20
+                    reward-=2000
+        else: 
+            reward +=10000
+        """
+        if len(self.memory)>=3: 
+            #print(self.memory.pull(3)[0].state)
+            if state_is_equal(self.memory.pull(3)[0].state, self.memory.pull(3)[-1].state):
+                print('now!')
+                #eward-=10
+            else:
+                reward+=50
+        """
+
+        print(reward)
         self.memory.push(current_obs,torch.as_tensor(current_action),torch.as_tensor(next_obs),torch.FloatTensor([reward]))
         optimize_model(self.memory, self.policy_net, self.target_net, self.optimizer)
  
@@ -124,7 +144,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
 
     :param self: The same object that is passed to all of your callbacks.
     """
-
+    self.game +=1
     torch.save(self.policy_net.state_dict(), "policy_net.pt")
     torch.save(self.target_net.state_dict(), "target_net.pt")
 
@@ -139,8 +159,12 @@ def reward_from_events(self, events: List[str]) -> int:
     certain behavior.
     """
     game_rewards = {
-        e.COIN_COLLECTED: 100,
-        e.INVALID_ACTION: -50,
+        e.COIN_COLLECTED: 5000,
+        #e.INVALID_ACTION: -50,
+        e.MOVED_DOWN: -1,
+        e.MOVED_LEFT:-1,
+        e.MOVED_UP: -1,
+        e.MOVED_RIGHT:-1
     }
     reward_sum = 0
     for event in events:
