@@ -109,7 +109,7 @@ def get_action_and_observation(self, game_state):
     if not self.target:
         self.target =  game_state['coins'][get_minimum(current, game_state['coins'], self.board_size)]
     state = [x,y,arena[x+1, y], arena[x-1, y], arena[x, y+1], arena[x, y-1]]
-    if np.random.random() > 0.1:
+    if np.random.random() > 0.001:
         state.extend([self.target[0],self.target[1]])
         best_action = torch.argmax(self.policy_net(torch.FloatTensor(state)))
     else:

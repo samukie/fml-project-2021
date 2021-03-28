@@ -7,7 +7,7 @@ COLS = 17
 ROWS = 17
 CRATE_DENSITY = 0.20
 MAX_AGENTS = 4
-COIN_OVERFLOW = True
+COIN_OVERFLOW = False
 # Round properties
 MAX_STEPS = 400
 

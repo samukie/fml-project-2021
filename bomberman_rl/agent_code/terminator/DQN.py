@@ -19,11 +19,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 #GAMMA = 0.999
 GAMMA = 0.9
-EPS_START = 0.8
-EPS_END = 0.25
+EPS_START = 0.9
+EPS_END = 0.15
 EPS_DECAY = 100
 TARGET_UPDATE = 100
 
@@ -71,42 +71,65 @@ class ReplayMemory(object):
         return len(self.memory)
 
 
+
+
 class DQN(nn.Module):
     def __init__(self, D_in, H, D_out):
         super(DQN, self).__init__()
         self.l1 = nn.Linear(D_in, H)
         self.relu = nn.ReLU()
         self.l2=nn.Linear(H, D_out)
+        #self.l3=nn.Linear(H, D_out)
+        # why does no learn? 
 
+        
     def forward(self, X):
         return self.l2(self.relu(self.l1(X)))
-
+        #return self.l3(self.relu(self.l2(self.relu(self.l1(X)))))
 """
-class CONV_DQN(nn.Module):
+class DQN(nn.Module):
 
     def __init__(self, h, w, outputs):
         super(DQN, self).__init__()
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=5, stride=2)
-        self.bn1 = nn.BatchNorm2d(16)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=2)
+        self.conv1 = nn.Conv2d(17, 17, kernel_size=1, stride=2)
+        self.bn1 = nn.BatchNorm2d(17)
+        self.conv2 = nn.Conv2d(17, 32, kernel_size=1, stride=2)
         self.bn2 = nn.BatchNorm2d(32)
-        self.conv3 = nn.Conv2d(32, 32, kernel_size=5, stride=2)
+        self.conv3 = nn.Conv2d(32, 32, kernel_size=1, stride=2)
         self.bn3 = nn.BatchNorm2d(32)
 
         # Number of Linear input connections depends on output of conv2d layers
         # and therefore the input image size, so compute it.
-        def conv2d_size_out(size, kernel_size = 5, stride = 2):
+        def conv2d_size_out(size, kernel_size = 2, stride = 2):
             return (size - (kernel_size - 1) - 1) // stride  + 1
         convw = conv2d_size_out(conv2d_size_out(conv2d_size_out(w)))
         convh = conv2d_size_out(conv2d_size_out(conv2d_size_out(h)))
+    
         linear_input_size = convw * convh * 32
+        #linear_input_size = 96
+        #batch_linear_size = 96
+        #print()
+        #print(convw * convh)
+        #print(linear_input_size)
+        #self.batch_head = nn.Linear(batch_linear_size, outputs)
         self.head = nn.Linear(linear_input_size, outputs)
 
     # Called with either one element to determine next action, or a batch
     # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
+        #print(x)
+        #print(x.shape)
+        #print(x.size())
+        #if x.shape[0] ==5:
+        #    x = F.relu(self.bn1(self.conv1(torch.squeeze(x,-1))))
+        #else:
         x = F.relu(self.bn1(self.conv1(x)))
         x = F.relu(self.bn2(self.conv2(x)))
         x = F.relu(self.bn3(self.conv3(x)))
+        #print(x.view(x.size(0), -1).shape)
+        #print(self.head(x.view(x.size(0), -1)).shape)
+        #sprint(x.shape)
+        #if x.view(x.size(0), -1).shape[1] == 96:
+        #    return self.batch_head(x.view(x.size(0), -1))
         return self.head(x.view(x.size(0), -1))
 """

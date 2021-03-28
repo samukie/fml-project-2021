@@ -351,7 +351,7 @@ class BombeRLeWorld(GenericWorld):
                     if coin_pattern[i, j] == 1:
                         self.coins.append(Coin((x + i, x + j), self.arena[x+i,x+j] == 0))
                         coins[x + i, x + j] += 1"""
-        if s.COIN_OVERFLOW is False:
+        if s.COIN_OVERFLOW is True:
             for i in range(3):
                 for j in range(3):
                     n_crates = (self.arena[1 + 5 * i:6 + 5 * i, 1 + 5 * j:6 + 5 * j] == 1).sum()

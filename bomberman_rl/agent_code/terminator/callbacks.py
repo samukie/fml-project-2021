@@ -30,15 +30,15 @@ def setup(self):
         #self.model = weights / weights.sum()
         n_actions = len(ACTIONS)
         
-        
-        self.policy_net = DQN(28, 32, n_actions).to(device)
-        self.target_net = DQN(28, 32, n_actions).to(device)
+        """
+        self.policy_net = DQN(32, 32, n_actions).to(device)
+        self.target_net = DQN(32, 32, n_actions).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         """
         n_actions = len(ACTIONS)
-        self.policy_net = DQN(28, 32, n_actions).to(device)
-        self.target_net = DQN(28, 32, n_actions).to(device)
+        self.policy_net = DQN(32, 32, n_actions).to(device)
+        self.target_net = DQN(32, 32, n_actions).to(device)
 
         self.policy_net.load_state_dict(torch.load("policy_net.pt"))
         self.target_net.load_state_dict(torch.load("target_net.pt"))
@@ -46,7 +46,7 @@ def setup(self):
         self.policy_net.eval()
         self.target_net.eval()
         print('contructed')
-        """
+        
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
@@ -55,8 +55,8 @@ def setup(self):
             #self.policy_net = DQN(screen_height, screen_width, n_actions).to(device)
             #self.target_net = DQN(screen_height, screen_width, n_actions).to(device)
             n_actions = len(ACTIONS)
-            self.policy_net = DQN(28, 32, n_actions).to(device)
-            self.target_net = DQN(28, 32, n_actions).to(device)
+            self.policy_net = DQN(32, 32, n_actions).to(device)
+            self.target_net = DQN(32, 32, n_actions).to(device)
 
             self.policy_net.load_state_dict(torch.load("policy_net.pt"))
             self.target_net.load_state_dict(torch.load("target_net.pt"))
@@ -102,6 +102,9 @@ def target_is_valid(target, game_state):
 def get_coin_representation(coin_coordinate):
     decimal = coin_coordinate[0]*19**0 + coin_coordinate[1]*19**1
     return decimal
+
+#def get_placement_target(game_state):
+
 
 """
 def get_free_field(game_state):
@@ -219,9 +222,14 @@ def get_better_environment(game_state, target=False, bomb_target=False):
         arena[x-1, y], 
         arena[x, y+1], 
         arena[x, y-1],
+        arena[x-1, y-1],
+        arena[x+1, y+1],
+        arena[x+1, y-1],
+        arena[x-1, y+1],
         ]
     state.extend(arena_info)
     # reserve 4 4 player
+    
     player_state = []
     for player in game_state['others']:
         player_state.append(player[3][0])
@@ -249,6 +257,7 @@ def get_better_environment(game_state, target=False, bomb_target=False):
     #coin_state += [-2] * (4 - len(coin_state))
     #state.extend(coin_state)
     #print(coin_state)
+    
     if target==False: 
         state.append(0)
         state.append(0)
@@ -256,13 +265,14 @@ def get_better_environment(game_state, target=False, bomb_target=False):
         state.append(target[0])
         state.append(target[1])
 
-
+    
     if bomb_target==False: 
         state.append(0)
         state.append(0)
     else: 
         state.append(bomb_target[0])
         state.append(bomb_target[1])
+    
     #print(state)
     #print('bomb target', target)
     #print(state)
@@ -382,13 +392,17 @@ def get_action_and_observation(self, game_state):
         #print('bomb target ', self.bomb_target)
     else: 
         self.bomb_target = False
+    #print(self.target)
     if self.target: 
         if not target_is_valid(self.target, game_state):
             self.target=False
+
+    #print('no target ')
     if not self.target and not self.bomb_target:
         if not game_state['coins']==[]:
             self.target =  game_state['coins'][get_minimum(current, game_state['coins'], self.board_size)]
-            self.target = False
+            #self.target = False
+    
     #state = [x,y, arena[x+1, y], arena[x-1, y], arena[x, y+1], arena[x, y-1], bombs[0], bombs[1]]
     """
     if np.random.random() > 0.01 and self.target:
