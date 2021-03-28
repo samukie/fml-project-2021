@@ -160,7 +160,7 @@ def setup_training(self):
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
 
-    self.lr = 1e-2
+    self.lr = 1e-3
     critic_mult = 2
 
     self.optimizer = self.optim_type([
@@ -317,7 +317,7 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_UP : 5,
         e.MOVED_DOWN : 5,
         e.WAITED : -40,
-        e.INVALID_ACTION : -200,
+        e.INVALID_ACTION : -2000,
 
         e.BOMB_DROPPED : 0,
         e.BOMB_EXPLODED : 50,
