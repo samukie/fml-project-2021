@@ -27,7 +27,6 @@ def setup(self):
         self.logger.info("Setting up model from scratch.")
         #weights = np.random.rand(len(ACTIONS))
         #self.model = weights / weights.sum()
-        
         n_actions = len(ACTIONS)
         self.policy_net = DQN(8, 64, n_actions).to(device)
         self.target_net = DQN(8, 64, n_actions).to(device)
@@ -35,11 +34,11 @@ def setup(self):
         self.target_net.eval()
         """
         n_actions = len(ACTIONS)
-        self.policy_net = DQN(2, 64, n_actions).to(device)
-        self.target_net = DQN(2, 64, n_actions).to(device)
+        self.policy_net = DQN(8, 64, n_actions).to(device)
+        self.target_net = DQN(8, 64, n_actions).to(device)
 
-        self.policy_net.load_state_dict(torch.load("policy_net.pt"))
-        self.target_net.load_state_dict(torch.load("target_net.pt"))
+        self.policy_net.load_state_dict(torch.load("less_loops_policy_net.pt"))
+        self.target_net.load_state_dict(torch.load("less_loops_target_net.pt"))
 
         self.policy_net.eval()
         self.target_net.eval()
@@ -109,7 +108,11 @@ def get_action_and_observation(self, game_state):
     if not self.target:
         self.target =  game_state['coins'][get_minimum(current, game_state['coins'], self.board_size)]
     state = [x,y,arena[x+1, y], arena[x-1, y], arena[x, y+1], arena[x, y-1]]
-    if np.random.random() > 0.001:
+    if self.train: 
+        random_prob = self.game*10
+    else: 
+        random_prob = 0.005
+    if np.random.random() > 1/random_prob:
         state.extend([self.target[0],self.target[1]])
         best_action = torch.argmax(self.policy_net(torch.FloatTensor(state)))
     else:
