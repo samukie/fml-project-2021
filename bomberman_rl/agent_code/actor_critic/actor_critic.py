@@ -292,9 +292,9 @@ class ActorCriticConv(ActorCritic):
         num_actions,
         in_channels,
         actor_channels=[34, 68, 34, 17, 9],
-        flattened_dim_actor=5, # TODO determine by running model,
+        flattened_dim_actor=75, # TODO determine by running model,
         critic_channels=[34, 68, 34, 17, 9],
-        flattened_dim_critic=5, # TODO determine by running model
+        flattened_dim_critic=75, # TODO determine by running model
         alpha=1.0,
         dropout=0.0,
         gamma=0.99,
@@ -336,7 +336,6 @@ class ActorCriticConv(ActorCritic):
 
         # --------------- CRITIC -----------------
 
-        # TODO rename to hiddens
         critic_layers = []
         critic_prev_channel = state_dim
 
@@ -432,7 +431,7 @@ class ActorCriticConvRes(ActorCritic):
             )
 
         self.temperature = {"alpha": alpha}
-        
+
         actor_blocks += [
             nn.Flatten(1),
             nn.Linear(flattened_dim_actor, num_actions),
@@ -507,7 +506,7 @@ class ActorCriticDepthwiseConvResTransformer(ActorCritic):
         encoder_residual_settings=[[17, 17]],
         kernel=5,
         num_transf_layers=2,
-        num_heads=2,
+        num_heads=4,
         alpha=1,
         dropout=0.0,
         **kwargs,
@@ -555,7 +554,7 @@ class ActorCriticDepthwiseConvResTransformer(ActorCritic):
                     nn.ReLU6(),
                 ]
                 residual_prev_channel = residual_channel
-            
+
             # add the residual to get to same size with only one conv:
             ds = nn.Sequential(*[
                 nn.Conv2d(
@@ -564,6 +563,7 @@ class ActorCriticDepthwiseConvResTransformer(ActorCritic):
                     kernel,
                     padding=pad
                 ),
+                nn.LayerNorm(residual_channel),
                 nn.ReLU6()
             ])
 
@@ -587,9 +587,9 @@ class ActorCriticDepthwiseConvResTransformer(ActorCritic):
             dropout=dropout,
             emb_dropout=dropout,
         )
-        
+
         self.temperature = {"alpha": alpha}
-        
+
         actor_blocks = [
             actor,
             Temperature(self.temperature),

@@ -180,7 +180,7 @@ def setup_training(self):
         self.model.to(device)
         optimizer_to(self.optimizer, device)
     
-    print(f"Starting to train on {self.model._dev} ...")
+    printdbg(f"Starting to train on {self.model._dev} ...")
 
 
 def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_state: dict, events: List[str]):
@@ -231,12 +231,12 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                 if approach_made:
                     APPROACH_REWARD = 30
                     reward += APPROACH_REWARD
-                    print(f"Awarded {APPROACH_REWARD} for getting closer to next coin.")
+                    printdbg(f"Awarded {APPROACH_REWARD} for getting closer to next coin.")
                     events.append(e.APPROACHED)
                 else:
                     REPROACH_REWARD = 0
                     reward += REPROACH_REWARD
-                    print(f"Awarded {REPROACH_REWARD} for moving farther from next coin.")
+                    printdbg(f"Awarded {REPROACH_REWARD} for moving farther from next coin.")
                     events.append(e.DISTANCED)
 
             # this alternative reward would be sufficient for initial sparse coin task with no crates:
@@ -356,7 +356,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     :param self: The same object that is passed to all of your callbacks.
     """
 
-    print(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
+    printdbg(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
 
     # ------------------------ finalize model reward -------------------------
     # end_reward = 0
@@ -390,7 +390,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     # reset current_action_dict
     self.current_action_dict = deepcopy(self.action_dict)
 
-    print(f"Round {self.i_episode}: storing model at "+self.model_path)
+    printdbg(f"Round {self.i_episode}: storing model at "+self.model_path)
     # Store the model
     # TODO only if its best ? torch.save? ckpt dict mit model/episode/...
     torch.save(self.model, self.model_path)

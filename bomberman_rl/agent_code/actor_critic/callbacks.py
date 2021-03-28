@@ -19,6 +19,9 @@ MODELS = "models/"
 
 ACTIONS = ["UP", "RIGHT", "DOWN", "LEFT"]
 
+__DEBUG__ = False
+
+printdbg = lambda *args: print(args) if __DEBUG__ else None
 # ------------------ HELPER functions ---------------------
 
 
@@ -71,7 +74,7 @@ def look_for_targets(free_space, start, targets, logger=None):
                 parent_dict[neighbor] = current
                 dist_so_far[neighbor] = dist_so_far[current] + 1
     if logger:
-        print(f"Suitable target found at {best}")
+        printdbg(f"Suitable target found at {best}")
     # Determine the first step towards the best found target tile
     current = best
     while True:
@@ -130,8 +133,8 @@ def random_dieder4(arr, axes=(2,3)):
 
     arr = arr.copy() # avoid torch stride bug
 
-    # print("move_map:")
-    # print(move_map)
+    # printdbg("move_map:")
+    # printdbg(move_map)
 
     move_dict = {i: int(move_map[direction[0],direction[1]]) for i, direction in enumerate(directions)}
 
@@ -218,7 +221,7 @@ def get_features(self, game_state):
         # during training, randomly flip+rotate for better generalization:
         features, move_dict = random_dieder4(features, axes=(2,3))
 
-        # print(move_dict, type(move_dict))
+        # printdbg(move_dict, type(move_dict))
 
         # need to update corresponding actions (moves)
         for original_direction, transformed_direction in move_dict.items():
@@ -264,16 +267,16 @@ def setup(self):
     self.num_features = 6  # determine by looking at get_features()
     self.num_actions = len(self.action_dict)  # model outputs int to index action_dict
 
-    typ = "SkidsAndMudFlap"
+    typ = "Conv"
 
     self.optim_type = optim.Adam if typ=="Transformer" else optim.AdamW
 
     # no cuda: must try to load cpu model saved on cluster as e.g. Conv_cpu.pt
-    cpu = "_cpu" if not torch.cuda.is_available() else "" 
-    self.model_path = MODELS + typ + cpu + ".pt"
+    cpu = "_cpu" if not torch.cuda.is_available() else ""
+    self.model_path = MODELS + "small" + typ + cpu + ".pt"
 
     if not os.path.isfile(self.model_path):
-        print(f"Setting up model from scratch.")
+        printdbg(f"Setting up model from scratch.")
 
         if typ == "Linear":
             self.model = ActorCriticLinear(
@@ -282,7 +285,7 @@ def setup(self):
             )
         elif typ == "Conv":
             # channels = [34, 68, 136, 272, 34, 17, 9]
-            channels = [7, 3]
+            channels = [7, 5]
 
             self.model = ActorCriticConv(
                 in_channels=self.num_features,
@@ -293,8 +296,7 @@ def setup(self):
             )
         elif typ == "ConvRes":
 
-            # residual_settings = [[17, 13], [13, 9], [9, 5]]
-            residual_settings = [[17,17]]
+            residual_settings = [[17, 13], [13, 9], [9, 5]]
             flat_dim = 125
 
             self.model = ActorCriticConvRes(
@@ -308,7 +310,7 @@ def setup(self):
             )
 
         elif typ == "Transformer":
-            num_heads = 2
+            num_heads = 4
             self.model = ActorCriticTransformer(
                 board_size=self.board_size,
                 num_channels=self.num_features,
@@ -325,11 +327,11 @@ def setup(self):
                 in_channels=self.num_features,
             )
 
-        print("Successfully set up model:")
-        print(self.model)
+        printdbg("Successfully set up model:")
+        printdbg(self.model)
 
     else:
-        print("Loading model from saved state.")
+        printdbg("Loading model from saved state.")
 
         self.model = torch.load(self.model_path, map_location="cpu")
 
@@ -337,7 +339,7 @@ def setup(self):
     device = "cpu"
     self.model._dev = device
 
-    self.model.temperature = {"alpha": 0.9}
+    self.model.temperature = {"alpha": 0.9 if self.train else 1}
 
     # double check model is training 
     # (no reason to ever be in eval mode except tiny time saves with batch norm)
