@@ -273,7 +273,7 @@ def setup(self):
 
     # no cuda: must try to load cpu model saved on cluster as e.g. Conv_cpu.pt
     cpu = "_cpu" if not torch.cuda.is_available() else ""
-    self.model_path = MODELS + "small" + typ + cpu + ".pt"
+    self.model_path = MODELS + typ + cpu + ".pt"
 
     if not os.path.isfile(self.model_path):
         printdbg(f"Setting up model from scratch.")
@@ -286,6 +286,7 @@ def setup(self):
         elif typ == "Conv":
             # channels = [34, 68, 136, 272, 34, 17, 9]
             channels = [7, 5]
+            flat_dim = 405
 
             self.model = ActorCriticConv(
                 in_channels=self.num_features,
@@ -293,6 +294,8 @@ def setup(self):
                 num_actions=self.num_actions,
                 actor_channels=channels,
                 critic_channels=channels,
+                flattened_dim_actor=flat_dim,
+                flattened_dim_critic=flat_dim,
             )
         elif typ == "ConvRes":
 
@@ -339,10 +342,11 @@ def setup(self):
     device = "cpu"
     self.model._dev = device
 
-    self.model.temperature = {"alpha": 0.9 if self.train else 1}
+    self.model.temperature = {"alpha": 0.8 if self.train else 1}
 
     # double check model is training 
     # (no reason to ever be in eval mode except tiny time saves with batch norm)
+
     self.model.train()
 
 
