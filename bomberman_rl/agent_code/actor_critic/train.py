@@ -3,7 +3,6 @@ import random
 from collections import namedtuple, deque
 from typing import List
 
-
 import events as e
 from .callbacks import *
 
@@ -16,6 +15,8 @@ from torch.distributions import Categorical
 
 MODELS = "models/"
 MOVES = {e.MOVED_DOWN, e.MOVED_UP, e.MOVED_LEFT, e.MOVED_RIGHT}
+e.APPROACHED = "APPROACHED"
+e.DISTANCED = "DISTANCED"
 
 # This is only an example!
 # Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
@@ -100,6 +101,7 @@ def reward_moving_closer_breadth_first(free_space, start, targets, move, logger=
         current = frontier.pop(0)
         # Find distance from current position to all targets, track closest
         d = np.sum(np.abs(np.subtract(targets, current)), axis=1).min()
+
         if d + dist_so_far[current] <= best_dist:
             best = current
             best_dist = d + dist_so_far[current]
@@ -107,7 +109,8 @@ def reward_moving_closer_breadth_first(free_space, start, targets, move, logger=
             # Found path to a target's exact position, mission accomplished!
             best = current
             break
-        # Add unexplored free neighboring tiles to the queue in a random order
+
+        # Add unexplored free neighboring tiles to the queue in random order
         x, y = current
         neighbors = [(x, y) for (x, y) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] if free_space[x, y]]
         random.shuffle(neighbors)
@@ -118,25 +121,31 @@ def reward_moving_closer_breadth_first(free_space, start, targets, move, logger=
                 parent_dict[neighbor] = current
                 dist_so_far[neighbor] = dist_so_far[current] + 1
 
-    if logger: 
-        logger.debug(f'Suitable target found at {best}')
-    # Determine the first step towards the best found target tile
-    current = best
-    while True:
-        if parent_dict[current] == start:
-            break
-        current = parent_dict[current]
+    closest = [best]
+    # gather remaining targets with best 
+    while len(frontier) > 0:
+        candidate = frontier.pop(0)
+        if dist_so_far[candidate] == best_dist:
+            closest.append(candidate)
+        
 
-    d = current
+    for current in closest:
+        # Determine the first step towards the best found target tile
+        while True:
+            if parent_dict[current] == start:
+                break
+            current = parent_dict[current]
+
+        d = current
+        
+        x, y  = start
+        if d == (x, y - 1) and move == e.MOVED_UP \
+            or d == (x, y + 1) and move == e.MOVED_DOWN \
+            or d == (x - 1, y) and move == e.MOVED_LEFT \
+            or d == (x + 1, y) and move == e.MOVED_RIGHT:
+                return True
     
-    x,y  = start
-    if d == (x, y - 1) and move == e.MOVED_UP \
-        or d == (x, y + 1) and move == e.MOVED_DOWN \
-        or d == (x - 1, y) and move == e.MOVED_LEFT \
-        or d == (x + 1, y) and move == e.MOVED_RIGHT:
-            return True
     return False
- 
 
 
 # ----------------------------- Training methods --------------------------------- 
@@ -151,8 +160,14 @@ def setup_training(self):
     :param self: This object is passed to all callbacks and you can set arbitrary values.
     """
 
-    self.lr = 3e-2
-    self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
+    self.lr = 1e-2
+    critic_mult = 2
+
+    self.optimizer = self.optim_type([
+        {"params": self.model._encoder.parameters(), "lr": self.lr},
+        {"params": self.model._action_head.parameters(), "lr": self.lr},
+        {"params": self.model._value_head.parameters(), "lr": self.lr * critic_mult},
+    ])
 
     self.running_reward = 10 # arbitrarily initialize running reward
     self.EMA = 0.05 # Exponential moving average decay to calc running reward to display
@@ -214,9 +229,15 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                 approach_made = reward_moving_closer_breadth_first(free_space, start, targets, made_move, logger=None)
 
                 if approach_made:
-                    reward += 45
+                    APPROACH_REWARD = 30
+                    reward += APPROACH_REWARD
+                    print(f"Awarded {APPROACH_REWARD} for getting closer to next coin.")
+                    events.append(e.APPROACHED)
                 else:
-                    reward -= 10
+                    REPROACH_REWARD = 0
+                    reward += REPROACH_REWARD
+                    print(f"Awarded {REPROACH_REWARD} for moving farther from next coin.")
+                    events.append(e.DISTANCED)
 
             # this alternative reward would be sufficient for initial sparse coin task with no crates:
 
@@ -250,29 +271,31 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             """
 
         # scores
-        biggest_score_gain_reward = 40
+        # biggest_score_gain_reward = 40
 
-        self_gain = new_game_state["self"][1] - old_game_state["self"][1]
-        all_gains = [self_gain]
+        # self_gain = new_game_state["self"][1] - old_game_state["self"][1]
+        # all_gains = [self_gain]
 
-        others_before = old_game_state["others"]
-        for other in new_game_state["others"]:
-            name = other[0]
-            other_score = other[1]
-            for old_other in others_before:
-                if name == old_other[0]:
-                    all_gains += [other_score - old_other[1]]
+        # others_before = old_game_state["others"]
+        # for other in new_game_state["others"]:
+        #     name = other[0]
+        #     other_score = other[1]
+        #     for old_other in others_before:
+        #         if name == old_other[0]:
+        #             all_gains += [other_score - old_other[1]]
 
-        # give extra reward for being only one to increase score (this reward is calculated very inefficiently)
-        best_indices = argmax(all_gains)
-        if 0 in best_indices:
-            reward += biggest_score_gain_reward # we gained the most score this step
-        else:
-            reward -= biggest_score_gain_reward # someone else gained the most score this step
+        # # give extra reward for being only one to increase score (this reward is calculated very inefficiently)
+        # best_indices = argmax(all_gains)
+        # if 0 in best_indices:
+        #     reward += biggest_score_gain_reward # we gained the most score this step
+        # else:
+        #     reward -= biggest_score_gain_reward # someone else gained the most score this step
+
+        # input(f"Reward: {reward}")
 
         self.model.reward(reward)
 
-    self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
+    print(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
 
     # Idea: Add your own events to hand out rewards
     #if ...:
@@ -289,24 +312,24 @@ def reward_from_events(self, events: List[str]) -> int:
     # NOTE: design initial rewards here:
     game_rewards = {
 
-        e.MOVED_LEFT : -5,
-        e.MOVED_RIGHT : -5,
-        e.MOVED_UP : -5,
-        e.MOVED_DOWN : -5,
-        e.WAITED : -40,
-        e.INVALID_ACTION : -600,
+        e.MOVED_LEFT : 5,
+        e.MOVED_RIGHT : 5,
+        e.MOVED_UP : 5,
+        e.MOVED_DOWN : 5,
+        e.WAITED : 0,
+        e.INVALID_ACTION : 0,
 
         e.BOMB_DROPPED : 0,
-        e.BOMB_EXPLODED : 0,
+        e.BOMB_EXPLODED : 50,
 
-        e.CRATE_DESTROYED : 80,
-        e.COIN_FOUND : 30,
-        e.COIN_COLLECTED : 120,
+        e.CRATE_DESTROYED : 200,
+        e.COIN_FOUND : 50,
+        e.COIN_COLLECTED : 100,
 
         e.KILLED_OPPONENT : 433,
-        e.KILLED_SELF : -10000,
+        e.KILLED_SELF : -1000,
 
-        e.GOT_KILLED : -10001,
+        e.GOT_KILLED : -1200,
         e.OPPONENT_ELIMINATED : 333,
         e.SURVIVED_ROUND : 1000,
     }
@@ -316,7 +339,7 @@ def reward_from_events(self, events: List[str]) -> int:
         if event in game_rewards:
             reward_sum += game_rewards[event]
 
-    self.logger.info(f"Awarded {reward_sum} for events {', '.join(events)}")
+    print(f"Awarded {reward_sum} for events {', '.join(events)}")
     return reward_sum
 
 
@@ -333,30 +356,32 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     :param self: The same object that is passed to all of your callbacks.
     """
 
-    self.logger.debug(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
+    print(f'Encountered event(s) {", ".join(map(repr, events))} in final step')
 
     # ------------------------ finalize model reward -------------------------
-    end_reward = 0
-    # 1. winning:
+    # end_reward = 0
+    # # 1. winning:
 
-    self_score = last_game_state["self"][1]
-    all_scores = [self_score]
+    # self_score = last_game_state["self"][1]
+    # all_scores = [self_score]
 
-    for other in last_game_state["others"]:
-        all_scores += [other[1]]
+    # for other in last_game_state["others"]:
+    #     all_scores += [other[1]]
 
-    best_indices = argmax(all_scores)
-    if 0 in best_indices:
-        end_reward += self.win_reward # dependent on number of opponents
+    # best_indices = argmax(all_scores)
+    # if 0 in best_indices:
+    #     end_reward += self.win_reward # dependent on number of opponents
 
-    self.model.reward(end_reward)
+    # self.model.reward(end_reward)
+
+    episode_reward = sum(self.model.episode_rewards)
 
     # update cumulative reward (for logging)
-    self.running_reward = self.EMA * self.model.episode_reward + (1 - self.EMA) * self.running_reward
+    self.running_reward = self.EMA * episode_reward + (1 - self.EMA) * self.running_reward
 
-    self.logger.info('Episode {}\tLast reward: {:.2f}\tEMA reward: {:.2f}'.format(
-        self.i_episode, self.model.episode_reward, self.running_reward))
-
+    print('Episode {}\tNum Steps: {}\tReward SUM: {:.2f}\tEMA reward: {:.2f}'.format(
+        self.i_episode, last_game_state["step"], episode_reward, self.running_reward))
+    
     # main training code
     self.model.update(self.optimizer)
 
@@ -365,7 +390,7 @@ def end_of_round(self, last_game_state: dict, last_action: str, events: List[str
     # reset current_action_dict
     self.current_action_dict = deepcopy(self.action_dict)
 
-    print("storing model at "+self.model_path)
+    print(f"Round {self.i_episode}: storing model at "+self.model_path)
     # Store the model
     # TODO only if its best ? torch.save? ckpt dict mit model/episode/...
     torch.save(self.model, self.model_path)

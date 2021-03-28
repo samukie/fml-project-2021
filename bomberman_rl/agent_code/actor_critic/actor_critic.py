@@ -1,6 +1,7 @@
 import argparse
 from collections import namedtuple
 from itertools import count
+from typing import Dict
 
 import numpy as np
 import torch
@@ -11,6 +12,59 @@ from torch.distributions import Categorical
 from vit_pytorch import ViT
 
 SavedAction = namedtuple("SavedAction", ["log_prob", "value"])
+
+class Residual(nn.Module):
+    """Sequential with downsample module"""
+    def __init__(self, downsample, *mods, name="actor", num=0, **kwargs):
+        super().__init__()
+        for idx, mod in enumerate(mods):
+            self.add_module(
+                name=str(idx),
+                module=mod
+            )
+        self.n = idx+1
+        self.downsample = downsample
+        self.num = num
+        self.name = name
+
+    def forward(self, x):
+        residual = x
+        for i in range(self.n):
+            mod = self._modules[str(i)]
+            try:
+                x = mod(x)
+            except Exception as e:
+                input(
+f"{self.name}'s Residual #{self.num} got Error at its child #{i}/{len(self._modules)}: {e}"
+                )
+                raise e
+        try:
+            ds = self.downsample(residual)
+            out = x + ds 
+        except Exception as e:
+            input(
+f"{self.name}'s Residual #{self.num} got Error: {e}"
+            )
+            input(f"Shapes: (after main strand; then after downsample):\n{x.shape}\n{ds.shape}")
+            raise
+        return out
+
+class Temperature(nn.Module):
+    """
+    For use in nn.Sequential, before Softmax:
+
+    logits = logits / alpha
+
+    alpha < 0: peakier (exploit)
+    alpha > 0: widerer (explore)
+
+    temperature is dict of model so we can update it in place without having to go down to this model
+    """
+    def __init__(self, temperature: Dict[str,float]):
+        super().__init__()
+        self.temperature = temperature
+    def forward(self, logits):
+        return logits / self.temperature["alpha"]
 
 
 class ActorCritic(nn.Module):
@@ -23,7 +77,7 @@ class ActorCritic(nn.Module):
         num_actions=1,
         gamma=0.99,
         eps=1e-7,
-        sam_mult=10000,
+        sam_mult=1,
         **kwargs,
     ):
         super(ActorCritic, self).__init__()
@@ -32,7 +86,6 @@ class ActorCritic(nn.Module):
 
         # action & reward buffers
         self.saved_actions = []
-        self.episode_reward = 0
         self.episode_rewards = []
         self.gamma = gamma
         self.eps = eps
@@ -46,7 +99,9 @@ class ActorCritic(nn.Module):
     def actor(self, x):
         try:
             return self._action_head(x)
-        except AttributeError:
+        except AttributeError as e:
+            input(e)
+
             raise NotImplementedError(f"ActorCritic must implement _action_head")
 
     def critic(self, x):
@@ -93,12 +148,9 @@ class ActorCritic(nn.Module):
         return action.item()
 
     def reward(self, r):
-        # R = r*self.samuels_multiplier
-        mult = 10
-        R = r * mult
+        R = r * self.samuels_multiplier
 
         self.episode_rewards.append(R)
-        self.episode_reward += R
 
     def update(self, optimizer):
         """
@@ -124,7 +176,7 @@ class ActorCritic(nn.Module):
             R = r + self.gamma * R
             returns.insert(0, R)
 
-        returns = torch.tensor(returns)
+        returns = torch.tensor(returns, dtype=torch.float32)
         returns = (returns - returns.mean()) / (returns.std() + self.eps)
 
         for (log_prob, value), R in zip(saved_actions, returns):
@@ -139,17 +191,18 @@ class ActorCritic(nn.Module):
         # reset gradients
         optimizer.zero_grad()
 
-        # sum up all the values of policy_losses and value_losses
+        # # sum up all the values of policy_losses and value_losses
         loss = torch.stack(policy_losses).sum() + torch.stack(value_losses).sum()
+
+        # input(loss)
 
         # perform backprop
         loss.backward()
         optimizer.step()
 
         # reset episode_rewards and action buffer
-        self.episode_reward = 0
-        del self.episode_rewards[:]
-        del self.saved_actions[:]
+        self.episode_rewards = []
+        self.saved_actions = []
 
 
 class ActorCriticLinear(ActorCritic):
@@ -159,30 +212,32 @@ class ActorCriticLinear(ActorCritic):
 
     def __init__(
         self,
-        num_states,
+        num_channels,
         num_actions=1,
-        state_dim=64,
-        actor_hiddens=[128, 32],
-        critic_hiddens=[128, 32, 4],
-        dropout=0.2,
-        gamma=0.99,
+        state_dim=17,
+        actor_hiddens=[17, 9],
+        critic_hiddens=[17, 9],
+        alpha=1.0,
+        dropout=0.0,
         **kwargs,
     ):
 
         super(ActorCriticLinear, self).__init__(
-            num_states,
+            num_channels,
             num_actions,
-            gamma=gamma,
             **kwargs,
         )
+        input_dim = 1734
 
-        self.state_dim = (
-            state_dim  # hidden state dimension which is input to A and to C
-        )
+        self.state_dim = state_dim  # hidden state dimension which is input to A and to C
 
         # --------------- ENCODER --------------
 
-        self._encoder = nn.Sequential(nn.Linear(num_states, state_dim), nn.ReLU6())
+        self._encoder = nn.Sequential(
+            nn.Flatten(1),
+            nn.Linear(input_dim, state_dim), 
+            nn.ReLU6()
+        )
 
         # --------------- ACTOR -----------------
 
@@ -197,8 +252,11 @@ class ActorCriticLinear(ActorCritic):
             ]
             actor_prev_hidden = actor_hidden
 
+        self.temperature = {"alpha": alpha}
+
         actor_layers += [
             nn.Linear(actor_prev_hidden, num_actions), 
+            Temperature(self.temperature),
             nn.Softmax(dim=-1)
         ]
 
@@ -234,15 +292,16 @@ class ActorCriticConv(ActorCritic):
         num_actions,
         in_channels,
         actor_channels=[34, 68, 34, 17, 9],
-        flattened_dim_actor=75, # TODO determine by running model,
+        flattened_dim_actor=5, # TODO determine by running model,
         critic_channels=[34, 68, 34, 17, 9],
-        flattened_dim_critic=75, # TODO determine by running model
-        dropout=0.1,
+        flattened_dim_critic=5, # TODO determine by running model
+        alpha=1.0,
+        dropout=0.0,
         gamma=0.99,
         **kwargs,
     ):
 
-        super(ActorCriticConv, self).__init__()
+        super().__init__()
 
         state_dim = in_channels  # hidden channels which are input to A and to C
 
@@ -264,9 +323,12 @@ class ActorCriticConv(ActorCritic):
             ]
             actor_prev_channel = actor_channel
 
+        self.temperature = {"alpha": alpha}
+
         actor_layers += [
             nn.Flatten(1),
             nn.Linear(flattened_dim_actor, num_actions),
+            Temperature(self.temperature),
             nn.Softmax(dim=-1),
         ]
 
@@ -295,6 +357,267 @@ class ActorCriticConv(ActorCritic):
         self._value_head = nn.Sequential(*critic_layers)
 
 
+
+class ActorCriticConvRes(ActorCritic):
+    """
+    implements both actor and critic in one model, residually
+    """
+
+    def __init__(
+        self,
+        board_size, # e.g. 17
+        num_actions,
+        in_channels,
+        actor_residual_settings=[[17, 13], [13, 9]],
+        flattened_dim_actor=729, 
+        kernel=5,
+        critic_residual_settings=[[17, 13], [13, 9]], # FIXME unused as of yet
+        flattened_dim_critic=729, 
+        alpha=1,
+        dropout=0.0,
+        gamma=0.99,
+        **kwargs,
+    ):
+
+        super().__init__()
+
+        state_dim = in_channels  # hidden channels which are input to A and to C
+
+        # --------------- ENCODER --------------
+
+        self._encoder = nn.Sequential(
+            nn.Conv2d(in_channels, state_dim, kernel_size=1), nn.ReLU6()
+        )
+
+        # --------------- ACTOR -----------------
+
+        actor_blocks = []
+        residual_prev_channel = state_dim
+
+        pad = kernel // 2
+        padding = [[pad,0] for _ in range(len(actor_residual_settings))] # adjust based on actor residual settings
+
+        for i, residual_channels in enumerate(actor_residual_settings):
+            residual_layers = []
+            # build sequential with given channels, and
+            # and add downsample connection to directly go down
+
+            IO_channel = residual_prev_channel
+
+            for j, residual_channel in enumerate(residual_channels):
+
+                residual_layers += [
+                    nn.Conv2d(residual_prev_channel, residual_channel, kernel, padding=padding[i][j]),  # FIXME padding = 2 !!!
+                    nn.LayerNorm(residual_channel),
+                    nn.Dropout(p=dropout),
+                    nn.ReLU6(),
+                ]
+                residual_prev_channel = residual_channel
+            
+            # add the depthwise downsample to get to same size directly:
+            downsample_depthw = nn.Sequential(*[
+                nn.Conv2d(
+                    IO_channel, residual_prev_channel*IO_channel, kernel, 
+                    groups=IO_channel, 
+                    padding=pad
+                ),
+                nn.Conv2d(IO_channel*residual_prev_channel, residual_prev_channel, kernel),
+                nn.LayerNorm(residual_prev_channel),
+                nn.Dropout(p=dropout),
+                nn.ReLU6(),
+            ])
+
+            actor_blocks.append(
+                Residual(downsample_depthw, *residual_layers, name="actor", num=i)
+            )
+
+        self.temperature = {"alpha": alpha}
+        
+        actor_blocks += [
+            nn.Flatten(1),
+            nn.Linear(flattened_dim_actor, num_actions),
+            Temperature(self.temperature),
+            nn.Softmax(dim=-1),
+        ]
+
+        self._action_head = nn.Sequential(*actor_blocks)
+
+        # --------------- CRITIC -----------------
+
+        critic_blocks = []
+        residual_prev_channel = state_dim
+
+        padding = [[pad,0] for _ in range(len(actor_residual_settings))] # adjust based on actor residual settings
+
+        for i, residual_channels in enumerate(critic_residual_settings):
+            residual_layers = []
+            # build sequential with given channels, and
+            # and add downsample connection to directly go down
+
+            IO_channel = residual_prev_channel
+
+            for j, residual_channel in enumerate(residual_channels):
+
+                residual_layers += [
+                    nn.Conv2d(residual_prev_channel, residual_channel, kernel, padding=padding[i][j]),
+                    nn.LayerNorm(residual_channel),
+                    nn.Dropout(p=dropout),
+                    nn.ReLU6(),
+                ]
+                residual_prev_channel = residual_channel
+            
+            # add the depthwise downsample to get to same size directly:
+            downsample_depthw = nn.Sequential(*[
+                nn.Conv2d(
+                    IO_channel, residual_prev_channel*IO_channel, kernel, 
+                    groups=IO_channel, 
+                    padding=pad
+                ),
+                nn.Conv2d(IO_channel*residual_prev_channel, residual_prev_channel, kernel),
+                nn.LayerNorm(residual_prev_channel),
+                nn.Dropout(p=dropout),
+                nn.ReLU6(),
+            ])
+
+            critic_blocks.append(
+                Residual(downsample_depthw, *residual_layers, name="critic", num=i)
+            )
+        
+        critic_blocks += [
+            nn.Flatten(1),
+            nn.Linear(flattened_dim_critic, 1)
+        ]
+
+        self._value_head = nn.Sequential(*critic_blocks)
+ 
+
+class ActorCriticDepthwiseConvResTransformer(ActorCritic):
+    """
+    implements both actor and critic in one model, 
+        basically like ActorCriticTransformer,
+            but with a depthwise convolutional encoder,
+                consisting of residual blocks
+    """
+
+    def __init__(
+        self,
+        board_size, # e.g. 17
+        num_actions,
+        in_channels,
+        encoder_residual_settings=[[17, 17]],
+        kernel=5,
+        num_transf_layers=2,
+        num_heads=2,
+        alpha=1,
+        dropout=0.0,
+        **kwargs,
+    ):
+
+        super().__init__()
+
+        state_dim = in_channels  # hidden channels which are input to A and to C
+
+
+        # --------------- ENCODER -----------------
+
+        encoder_blocks = []
+        residual_prev_channel = state_dim
+
+        pad = kernel // 2
+        padding = [[pad,pad] for _ in range(len(encoder_residual_settings))] # adjust based on encoder residual settings
+
+        for i, residual_channels in enumerate(encoder_residual_settings):
+            residual_layers = []
+            # build sequential with given channels, and
+            # and add downsample connection to directly go down
+
+            IO_channel = residual_prev_channel
+
+            for j, residual_channel in enumerate(residual_channels):
+
+                residual_layers += [
+                    # depthwise
+                    nn.Conv2d(
+                        residual_prev_channel, 
+                        residual_prev_channel * residual_channel, 
+                        kernel, 
+                        padding=padding[i][j],
+                        groups=residual_prev_channel,
+                    ),
+                    nn.Conv2d(
+                        residual_prev_channel * residual_channel,
+                        residual_channel,
+                        kernel,
+                        padding=padding[i][j],
+                    ),
+                    nn.LayerNorm(residual_channel),
+                    nn.Dropout(p=dropout),
+                    nn.ReLU6(),
+                ]
+                residual_prev_channel = residual_channel
+            
+            # add the residual to get to same size with only one conv:
+            ds = nn.Sequential(*[
+                nn.Conv2d(
+                    IO_channel,
+                    residual_channel,
+                    kernel,
+                    padding=pad
+                ),
+                nn.ReLU6()
+            ])
+
+            encoder_blocks.append(
+                Residual(ds, *residual_layers, name="encoder", num=i)
+            )
+
+        self._encoder = nn.Sequential(*encoder_blocks)
+
+        # ----------------- ACTOR ------------------
+
+        actor = ViT(
+            image_size=residual_channel,
+            channels=residual_channel,
+            patch_size=1,
+            num_classes=num_actions,
+            dim=num_heads * residual_channel,
+            depth=num_transf_layers,
+            heads=num_heads,
+            mlp_dim=num_heads * residual_channel,
+            dropout=dropout,
+            emb_dropout=dropout,
+        )
+        
+        self.temperature = {"alpha": alpha}
+        
+        actor_blocks = [
+            actor,
+            Temperature(self.temperature),
+            nn.Softmax(dim=-1),
+        ]
+
+        self._action_head = nn.Sequential(*actor_blocks)
+
+        # --------------- CRITIC -----------------
+
+        critic = ViT(
+            image_size=residual_channel,
+            channels=residual_channel,
+            patch_size=1,
+            num_classes=1,
+            dim=num_heads * residual_channel,
+            depth=num_transf_layers,
+            heads=num_heads,
+            mlp_dim=num_heads * residual_channel,
+            dropout=dropout,
+            emb_dropout=dropout,
+        )
+
+        self._value_head = critic
+ 
+
+
+
 class ActorCriticTransformer(ActorCritic):
     """
     implements both actor and critic in one model, conventionally
@@ -303,14 +626,15 @@ class ActorCriticTransformer(ActorCritic):
     def __init__(
         self,
         board_size,  # e.g. 17
-        num_states,
+        num_channels,
         num_actions,
         hidden_dim,
         num_heads,
         mlp_dim,
         num_layers=2,
         critic_hiddens=[9],
-        dropout=0.08,
+        alpha=1.0,
+        dropout=0.00,
         gamma=0.99,
         **kwargs,
     ):
@@ -329,7 +653,7 @@ class ActorCriticTransformer(ActorCritic):
 
         actor = ViT(
             image_size=board_size,
-            channels=num_states,
+            channels=num_channels,
             patch_size=1,
             num_classes=num_actions,
             dim=hidden_dim,
@@ -339,8 +663,12 @@ class ActorCriticTransformer(ActorCritic):
             dropout=dropout,
             emb_dropout=dropout,
         )
+
+        self.temperature = {"alpha": alpha}
+
         self._action_head = nn.Sequential(
             actor, 
+            Temperature(self.temperature),
             nn.Softmax(dim=-1)
         )
 
@@ -361,7 +689,10 @@ class ActorCriticTransformer(ActorCritic):
 
         critic_layers += [
             nn.Flatten(1),
-            nn.Linear(critic_prev_hidden * num_states, 1),
+            nn.Linear(critic_prev_hidden * num_channels, 1),
         ]
 
         self._value_head = nn.Sequential(*critic_layers)
+
+
+
