@@ -259,7 +259,7 @@ def setup(self):
         1:"RIGHT",
         2:"UP",
         3:"DOWN",
-        4:'BOMB', 
+        4:'BOMB',
         5:'WAIT',
     }
     self.current_action_dict = deepcopy(self.action_dict)
@@ -284,9 +284,11 @@ def setup(self):
                 num_actions=self.num_actions,
             )
         elif typ == "Conv":
-            # channels = [34, 68, 136, 272, 34, 17, 9]
-            channels = [7, 5]
+            channels = [34, 68, 136]
             flat_dim = 405
+
+            # channels = [7, 5]
+            # flat_dim = 405
 
             self.model = ActorCriticConv(
                 in_channels=self.num_features,
@@ -342,7 +344,7 @@ def setup(self):
     device = "cpu"
     self.model._dev = device
 
-    self.model.temperature = {"alpha": 0.8 if self.train else 1}
+    self.model.temperature = {"alpha": 0.9 if self.train else 1}
 
     # double check model is training 
     # (no reason to ever be in eval mode except tiny time saves with batch norm)
