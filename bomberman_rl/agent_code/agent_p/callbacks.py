@@ -107,13 +107,16 @@ def get_action_and_observation(self, game_state):
         if not target_is_valid(self.target, game_state):
             self.target=False
     if not self.target:
-        self.target =  game_state['coins'][get_minimum(current, game_state['coins'], self.board_size)]
+        if game_state['coins'] != []:
+            self.target =  game_state['coins'][get_minimum(current, game_state['coins'], self.board_size)]
+        else:
+            self.target = list(np.random.randint(0, 17, size=2))
     state = [x,y,arena[x+1, y], arena[x-1, y], arena[x, y+1], arena[x, y-1]]
-    if np.random.random() > 0.1:
+    if np.random.random() > 0.05:
         state.extend([self.target[0],self.target[1]])
         best_action = torch.argmax(self.policy_net(torch.FloatTensor(state)))
     else:
-        state.extend([0,0])
+        state.extend(list(np.random.randint(0, 17, size=2)))
         best_action = torch.as_tensor(np.random.randint(0, len(ACTIONS)))
     return best_action, state
 
