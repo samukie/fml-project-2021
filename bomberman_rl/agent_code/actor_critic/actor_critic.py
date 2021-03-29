@@ -183,8 +183,6 @@ class ActorCritic(nn.Module):
         # # sum up all the values of policy_losses and value_losses
         loss = torch.stack(policy_losses).sum() + torch.stack(value_losses).sum()
 
-        # input(loss)
-
         # perform backprop
         loss.backward()
         optimizer.step()
@@ -296,10 +294,7 @@ class ActorCriticConv(ActorCritic):
 
         # --------------- ENCODER --------------
 
-        self._encoder = nn.Sequential(
-            nn.Conv2d(in_channels, state_dim, kernel_size=1), 
-            # nn.ReLU6()
-        )
+        self._encoder = nn.Identity()
 
         # --------------- ACTOR -----------------
 
@@ -345,8 +340,6 @@ class ActorCriticConv(ActorCritic):
 
         self._value_head = nn.Sequential(*critic_layers)
 
-
-
 class ActorCriticConvRes(ActorCritic):
     """
     implements both actor and critic in one model, residually
@@ -374,10 +367,7 @@ class ActorCriticConvRes(ActorCritic):
 
         # --------------- ENCODER --------------
 
-        self._encoder = nn.Sequential(
-            nn.Conv2d(in_channels, state_dim, kernel_size=1), 
-            # nn.ReLU6()
-        )
+        self._encoder = nn.Identity()
 
         # --------------- ACTOR -----------------
 
@@ -506,7 +496,6 @@ class ActorCriticDepthwiseConvResTransformer(ActorCritic):
         super().__init__()
 
         state_dim = in_channels  # hidden channels which are input to A and to C
-
 
         # --------------- ENCODER -----------------
 

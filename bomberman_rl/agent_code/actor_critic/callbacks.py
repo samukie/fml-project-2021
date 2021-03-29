@@ -172,9 +172,19 @@ def get_features(self, game_state):
     agents_feat = np.zeros((self.board_size, self.board_size))
     scores_feat = np.zeros((self.board_size, self.board_size))
 
-    my_agent_pos = game_state["self"][-1]
-    agents_feat[my_agent_pos[0], my_agent_pos[1]] = 100  # identify self
+    selfx, selfy = my_agent_pos = game_state["self"][-1]
+    agents_feat[my_agent_pos[0], my_agent_pos[1]] = 2000  # identify self
     scores_feat[my_agent_pos[0], my_agent_pos[1]] = game_state["self"][1]
+
+    allowed = field+explosions+bomb_feat == 0
+    if allowed[selfx-1, selfy]:
+        agents_feat[selfx-1, selfy] = 500
+    if allowed[selfx, selfy-1]:
+        agents_feat[selfx, selfy-1] = 500
+    if allowed[selfx+1, selfy]:
+        agents_feat[selfx+1, selfy] = 500
+    if allowed[selfx, selfy+1]:
+        agents_feat[selfx, selfy+1] = 500
 
     self_bomb = game_state["self"][-2]
 
@@ -182,16 +192,16 @@ def get_features(self, game_state):
         other[1:] for other in game_state["others"]
     ]:
         # determine based on availability of self+other's reward for getting to agent
-        if self_bomb and other_bomb:
-            agent_reward = -110
-        elif self_bomb and not other_bomb:
-            agent_reward = -80
-        elif not self_bomb and other_bomb:
-            agent_reward = -120
-        elif not self_bomb and not other_bomb:
-            agent_reward = -90
+        # if self_bomb and other_bomb:
+        #     agent_reward = -110
+        # elif self_bomb and not other_bomb:
+        #     agent_reward = -80
+        # elif not self_bomb and other_bomb:
+        #     agent_reward = -120
+        # elif not self_bomb and not other_bomb:
+        #     agent_reward = -90
 
-        agents_feat[other_pos[0], other_pos[1]] = agent_reward
+        agents_feat[other_pos[0], other_pos[1]] = -100
         scores_feat[other_pos[0], other_pos[1]] = other_score
 
     conv_feats += [agents_feat]
@@ -267,9 +277,9 @@ def setup(self):
     self.num_features = 6  # determine by looking at get_features()
     self.num_actions = len(self.action_dict)  # model outputs int to index action_dict
 
-    typ = "ConvRes"
+    typ = "Transformer"
 
-    self.optim_type = optim.Adam if typ=="Transformer" else optim.AdamW
+    self.optim_type = optim.Adam # if typ=="Transformer" else optim.AdamW
 
     # no cuda: must try to load cpu model saved on cluster as e.g. Conv_cpu.pt
     cpu = "_cpu" if not torch.cuda.is_available() else ""
@@ -316,14 +326,16 @@ def setup(self):
 
         elif typ == "Transformer":
             num_heads = 4
+            hidden = self.board_size + num_heads
+
             self.model = ActorCriticTransformer(
                 board_size=self.board_size,
                 num_channels=self.num_features,
                 num_actions=self.num_actions,
-                hidden_dim=num_heads * self.board_size,
+                hidden_dim=hidden,
                 num_heads=num_heads,
-                mlp_dim=self.board_size * num_heads,
-                num_layers=1,
+                mlp_dim=hidden,
+                num_layers=3,
             )
         elif typ == "SkidsAndMudFlap":
             self.model = ActorCriticDepthwiseConvResTransformer(

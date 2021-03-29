@@ -316,22 +316,22 @@ def reward_from_events(self, events: List[str]) -> int:
         e.MOVED_RIGHT : 5,
         e.MOVED_UP : 5,
         e.MOVED_DOWN : 5,
-        e.WAITED : -40,
-        e.INVALID_ACTION : -2000,
+        e.WAITED : -100,
+        e.INVALID_ACTION : -200,
 
         e.BOMB_DROPPED : 0,
-        e.BOMB_EXPLODED : 50,
+        e.BOMB_EXPLODED : 500,
 
         e.CRATE_DESTROYED : 200,
         e.COIN_FOUND : 50,
-        e.COIN_COLLECTED : 100,
+        e.COIN_COLLECTED : 200,
 
-        e.KILLED_OPPONENT : 433,
-        e.KILLED_SELF : -1000,
+        e.KILLED_OPPONENT : 4000,
+        e.KILLED_SELF : -10000,
 
-        e.GOT_KILLED : -1200,
-        e.OPPONENT_ELIMINATED : 333,
-        e.SURVIVED_ROUND : 1000,
+        e.GOT_KILLED : -12000,
+        e.OPPONENT_ELIMINATED : 33333,
+        e.SURVIVED_ROUND : 10000,
     }
     reward_sum = 0
 
