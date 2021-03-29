@@ -5,7 +5,7 @@ from fallbacks import pygame
 # Game properties
 COLS = 17
 ROWS = 17
-CRATE_DENSITY = 0.75
+CRATE_DENSITY = 0.2
 MAX_AGENTS = 4
 COIN_OVERFLOW = True
 # Round properties
@@ -25,7 +25,7 @@ BOMB_TIMER = 4
 EXPLOSION_TIMER = 2
 
 # Rules for agents
-TIMEOUT = 3.5
+TIMEOUT = .5
 REWARD_KILL = 0
 REWARD_COIN = 1
 
