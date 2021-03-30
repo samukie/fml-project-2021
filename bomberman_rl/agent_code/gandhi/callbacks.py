@@ -29,22 +29,23 @@ def setup(self):
         #weights = np.random.rand(len(ACTIONS))
         #self.model = weights / weights.sum()
         n_actions = len(ACTIONS)
-        """
-        self.policy_net = DQN(12, 32, n_actions).to(device)
-        self.target_net = DQN(12, 32, n_actions).to(device)
+        
+        self.policy_net = DQN(10, 32, n_actions).to(device)
+        self.target_net = DQN(10, 32, n_actions).to(device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         """
         n_actions = len(ACTIONS)
-        self.policy_net = DQN(12, 32, n_actions).to(device)
-        self.target_net = DQN(12, 32, n_actions).to(device)
+        self.policy_net = DQN(10, 32, n_actions).to(device)
+        self.target_net = DQN(10, 32, n_actions).to(device)
 
         self.policy_net.load_state_dict(torch.load("policy_net.pt"))
         self.target_net.load_state_dict(torch.load("target_net.pt"))
 
         self.policy_net.eval()
         self.target_net.eval()
-        print('contructed')        
+        print('contructed') 
+        """     
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
@@ -162,28 +163,19 @@ def bread_first_search(game_state, start, targets):
             neighs.append([node[0]-1,node[1]])
         if node[1]-1 >0:
             neighs.append([node[0],node[1]-1])
-        #print('neighs ', neighs)
         valid_neighs = [neigh for neigh in neighs if game_state[neigh[0], neigh[1]] \
             and neigh not in visited_nodes]
-        #print('gamestate ', [game_state[neigh[0], neigh[1]] for neigh in neighs])
-        #print('valid_eighs ', valid_neighs)
-        #print(valid_neighs)
         return valid_neighs
     all_nodes = [start]
     visited_nodes = [start]
     while all_nodes !=[]: 
-        #print('TRUE')
         current = all_nodes.pop()
         visited_nodes.append(current)
-        #print('current ', current)
         if current in targets: 
             return current
         neighs = get_neighbors(current, visited_nodes)
         all_nodes.extend(neighs)
-    return None
-
-
-
+    return False
 
 def look_for_targets(free_space, start, targets, logger=None):
     """Find direction of closest target that can be reached via free tiles.
@@ -236,8 +228,10 @@ def look_for_targets(free_space, start, targets, logger=None):
 
 def get_targets(game_state):
     targets = []
+    _, _, _, (self_x, self_y) = game_state['self']
     x = game_state['bombs'][0][0][0]
     y = game_state['bombs'][0][0][1]
+
     if x+1 <16: 
         if y+1<16: 
             targets.append([x+1, y+1])
@@ -272,15 +266,13 @@ def get_targets(game_state):
     zeros = game_state['field']==0
     invalids= [[x+i,y] for i in range(0,4)] + [[x-i,y] for i in range(1,4)] + \
         [[x,y+i] for i in range(1,4)] + [[x,y-i] for i in range(1,4)]
-    
     valid_entries = [[i,j] for i in range(zeros.shape[0]) for j in range(zeros.shape[1]) \
-        if zeros[i,j] == True and [i,j] not in invalids]
-    
+        if zeros[i,j] == True and [i,j] not in invalids if get_distance([i,j], [self_x,self_y], 17) < 5]
     #print('targets ', targets)
     #print('cleaned targets ',  zeros)
     #print(valid_entries)
-    return valid_entries
 
+    return valid_entries
 
 def get_action_and_observation(self, game_state):
     _, _, _, (x, y) = game_state['self']
@@ -288,13 +280,17 @@ def get_action_and_observation(self, game_state):
     arena = game_state['field']
     # update target
     bombs = [0,0]
-    if game_state['bombs'] != []:
-        bombs[0] = game_state['bombs'][0][0][0]
-        bombs[1] = game_state['bombs'][0][0][1]
+    if game_state['bombs'] != [] :
+        bomb_coords = [bomb[0] for bomb in game_state['bombs']]
+        bomb_distances = [get_distance([x,y], bomb, self.board_size) for bomb in bomb_coords]
+        sorted_bombs = [bomb for _,bomb in sorted(zip(bomb_distances,bomb_coords))]
+        bombs[0] = sorted_bombs[0][0]
+        bombs[1] = sorted_bombs[0][1]
+        #print(bombs)
         #self.bomb_target = bombs
         targets = []
         free_space = arena == 0
-        self.bomb_target = bread_first_search(free_space, tuple(bombs), get_targets(game_state))
+        self.bomb_target = bread_first_search(free_space, bombs, get_targets(game_state))
         #print('bomb ', bombs)
         #print('bomb target ', self.bomb_target)
     else: 
@@ -306,23 +302,30 @@ def get_action_and_observation(self, game_state):
         if not game_state['coins']==[]:
             self.target =  game_state['coins'][get_minimum(current, game_state['coins'], self.board_size)]
             self.target = False
-    state = [x,y, arena[x+1, y], arena[x-1, y], arena[x, y+1], arena[x, y-1], bombs[0], bombs[1]]
+
+    explosions = game_state["explosion_map"].nonzero()
+    #plosions] = 2
+    state = [x,y, arena[x+1, y], arena[x-1, y], arena[x, y+1], arena[x, y-1]]
+
     """
     if np.random.random() > 0.01 and self.target:
         state.extend([self.target[0],self.target[1]])
         best_action = torch.argmax(self.policy_net(torch.FloatTensor(state)))
     """
-    if game_state['coins'] != []:
-        coin = game_state['coins'][get_minimum(current, game_state['coins'], self.board_size)]
-        state.extend(coin)
-    else:
+
+    if self.target: 
+        state.extend([self.target[0], self.targets[1]])
+    else: 
         state.extend([0,0])
-        #best_action = torch.as_tensor(np.random.randint(0, len(ACTIONS)))
-    if np.random.random() > 0.0001 and self.bomb_target:
+    if self.bomb_target: 
         state.extend([self.bomb_target[0],self.bomb_target[1]])
+    else: 
+        state.extend([0,0])
+    #print(state)
+    #1/(self.game)
+    if np.random.random() > 0.01:
         best_action = torch.argmax(self.policy_net(torch.FloatTensor(state)))
     else:
-        state.extend([0,0])
         best_action = torch.as_tensor(np.random.randint(0, len(ACTIONS)))
     return best_action, state
 
