@@ -12,9 +12,7 @@ A value method outputs a value representing the quality of the current state and
   
 On the other side, policy based methods aim at directly improving the policy of an agent, i.e., a mapping between states and actions. 
 
-Popular methods are:  
+Our methods are:  
 - (Deep) Q-Learning (value method)
 - Policy Gradient (policy method)
 - A2C (policy and value)
-- A3C (policy and value)
-- Dreamer v2 (OP method)
