@@ -125,7 +125,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         """
         if e.BOMB_EXPLODED in events:
             print("DID it")
-            reward+=10000
+            reward+=10
         
         if e.CRATE_DESTROYED in events: 
             print("better DID it")
@@ -155,9 +155,9 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             ]
             
             if 1 in surrounding: 
-                reward+=100
+                reward+=10000
             else:
-                reward-=100
+                reward-=10000
             if surrounding.count(0) == 1: 
                 reward+=100
                 #print('correct placement')
@@ -333,10 +333,10 @@ def reward_from_events(self, events: List[str]) -> int:
     }
     """
     game_rewards = {
-        e.KILLED_SELF: -30000,
-        e.BOMB_DROPPED: 100,
+        e.KILLED_SELF: -100000,
+        #e.BOMB_DROPPED: 100,
         #e.SURVIVED_ROUND: 100,
-        e.CRATE_DESTROYED: 100
+        #e.CRATE_DESTROYED: 100
     }
     
     reward_sum = 0
