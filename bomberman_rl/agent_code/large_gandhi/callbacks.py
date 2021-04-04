@@ -477,7 +477,7 @@ def get_action_and_observation(self, game_state):
     """
     #print(state)
     #1/(self.game)
-    if np.random.random() > 0.1:
+    if np.random.random() > 0.05:
         best_action = torch.argmax(self.policy_net(torch.FloatTensor(state)))
     else:
         best_action = torch.as_tensor(np.random.randint(0, len(ACTIONS)))

@@ -190,7 +190,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                     reward+=1000
                 elif curr_dist >= prev_dist:
                     #print('no follow')
-                    reward-=1000
+                    reward-=20000
             
             #reward += new_game_state['step']*10
         #print('reward ', reward)
