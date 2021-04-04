@@ -19,9 +19,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
-BATCH_SIZE = 128
-GAMMA = 0.999
-EPS_START = 0.9
+BATCH_SIZE = 32
+GAMMA = 0.9
+EPS_START = 0.8
 EPS_END = 0.05
 EPS_DECAY = 200
 TARGET_UPDATE = 10
@@ -76,10 +76,11 @@ class DQN(nn.Module):
         self.l1 = nn.Linear(D_in, H)
         self.relu = nn.ReLU()
         self.l2=nn.Linear(H, H)
+        self.relu2 = nn.ReLU()
         self.l3=nn.Linear(H, D_out)
 
     def forward(self, X):
-        return self.l3(self.relu(self.l2(self.relu(self.l1(X)))))
+        return self.l3(self.relu2(self.l2(self.relu(self.l1(X)))))
 
 """
 class DQN(nn.Module):

@@ -46,7 +46,6 @@ def setup(self):
         self.target_net.eval()
         print('contructed') 
         #self.l3
-        
     else:
         self.logger.info("Loading model from saved state.")
         with open("my-saved-model.pt", "rb") as file:
@@ -121,29 +120,20 @@ def get_better_environment(game_state, target=False, bomb_target=False):
     else: 
         state.append(-2)
         state.append(-2)
-    #coin_state += [-2] * (4 - len(coin_state))
-    #state.extend(coin_state)
-    #print(coin_state)
-    
     if target==False: 
-        state.append(0)
-        state.append(0)
+        state.append(-2)
+        state.append(-2)
     else: 
         state.append(target[0])
         state.append(target[1])
-
-    
     if bomb_target==False: 
-        state.append(0)
-        state.append(0)
+        state.append(-2)
+        state.append(-2)
     else: 
+        #print('appended')
         state.append(bomb_target[0])
         state.append(bomb_target[1])
-    
     #print(state)
-    #print('bomb target', target)
-    #print(state)
-    #return torch.from_numpy(arena).view(1,arena.shape[0]*arena.shape[1]).float()
     return state
 
 def look_for_targets(free_space, start, targets, logger=None):
@@ -188,7 +178,6 @@ def look_for_targets(free_space, start, targets, logger=None):
                 frontier.append(neighbor)
                 parent_dict[neighbor] = current
                 dist_so_far[neighbor] = dist_so_far[current] + 1
-    #if logger: logger.debug(f'Suitable target found at {best}')
     # Determine the first step towards the best found target tile
     current = best
     while True:
@@ -236,17 +225,9 @@ def get_targets(game_state):
     
     valid_entries = [[i,j] for i in range(zeros.shape[0]) for j in range(zeros.shape[1]) \
         if zeros[i,j] == True and [i,j] not in invalids]
-    
-    #print('targets ', targets)
-    #print('cleaned targets ',  zeros)
-    #print(valid_entries)
     return valid_entries
 
-
-
-
 def get_minimum(current, targets, board_size):
-    #print(targets)
     if targets == []: 
         return -1
     else:
@@ -454,6 +435,7 @@ def get_action_and_observation(self, game_state):
         bomb_coords = [bomb[0] for bomb in game_state['bombs']]
         bomb_distances = [get_distance([x,y], bomb, self.board_size) for bomb in bomb_coords]
         sorted_bombs = [bomb for _,bomb in sorted(zip(bomb_distances,bomb_coords))]
+        #print('bombs ',sorted_bombs)
         bombs[0] = sorted_bombs[0][0]
         bombs[1] = sorted_bombs[0][1]
         #print(bombs)
@@ -461,6 +443,7 @@ def get_action_and_observation(self, game_state):
         targets = []
         free_space = arena == 0
         self.bomb_target = bread_first_search(free_space, bombs, get_targets(game_state))
+        #print('btraget ', self.bomb_target)
         #print('bomb ', bombs)
         #print('bomb target ', self.bomb_target)
     else: 
@@ -494,7 +477,7 @@ def get_action_and_observation(self, game_state):
     """
     #print(state)
     #1/(self.game)
-    if np.random.random() > 0.01:
+    if np.random.random() > 0.1:
         best_action = torch.argmax(self.policy_net(torch.FloatTensor(state)))
     else:
         best_action = torch.as_tensor(np.random.randint(0, len(ACTIONS)))

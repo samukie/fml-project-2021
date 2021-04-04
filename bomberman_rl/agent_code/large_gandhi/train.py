@@ -102,7 +102,7 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         #max_future_value = np.max(self.model[next_obs[0]][next_obs[1]][future_surrounding])
   
         reward = reward_from_events(self, events)
-        reward += new_game_state['step']*1000
+        reward += new_game_state['step']*10
         if e.CRATE_DESTROYED in events: 
             self.crates_destroyed += 1
         if e.BOMB_DROPPED in events: 
@@ -125,21 +125,21 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
         """
         if e.BOMB_EXPLODED in events:
             print("DID it")
-            reward+=1000
+            reward+=10000
         
         if e.CRATE_DESTROYED in events: 
             print("better DID it")
-            reward+=500000
+            reward+=50000
         
         if e.BOMB_DROPPED in events:
             if not self.bomb_target: 
                 reward -= 1000
-                print('wrong placement')
+                #print('wrong placement')
                 self.total_wrong_placement += 1
         
             else: 
                 reward += 1000
-                print('correct placement')
+                #print('correct placement')
                 self.total_correct_placement += 1
             # crate 
             self.three = False
@@ -153,20 +153,21 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
             new_game_state['field'][new_game_state['bombs'][0][0][0], new_game_state['bombs'][0][0][1]+1],
             new_game_state['field'][new_game_state['bombs'][0][0][0], new_game_state['bombs'][0][0][1]-1]
             ]
-
+            
             if 1 in surrounding: 
-                reward+=1000
+                reward+=100
             else:
-                reward-=1000
+                reward-=100
             if surrounding.count(0) == 1: 
-                reward+=1000
-                print('correct placement')
+                reward+=100
+                #print('correct placement')
             else: 
-                reward-=1000
+                reward-=100
             #invalid=[
             
             self.bomb_counter= 3
         
+        """
         # additional_reward 
         if self.target:
             #print('coin target')
@@ -177,29 +178,26 @@ def game_events_occurred(self, old_game_state: dict, self_action: str, new_game_
                     reward+=10000
                 else:
                     if not e.COIN_COLLECTED in events:
-                        reward-=1000
-        
+        """
         if self.bomb_target:
-            #print(new_game_state)
-            #print('bomb target')
-            #print(self.bomb_target)
-            #print(new_game_state['bombs'][0])
+            #print('bomb target!', self.bomb_target)
             if old_game_state['bombs']!=[] and new_game_state['bombs']!=[]:
                 prev_dist =  get_distance(old_game_state['self'][3], self.bomb_target, self.board_size)
                 curr_dist =  get_distance(new_game_state['self'][3], self.bomb_target, self.board_size)
                 #print(curr_dist)
                 if curr_dist < prev_dist:
                     #print('followed')
-                    reward+=10000
+                    reward+=1000
                 elif curr_dist >= prev_dist:
                     #print('no follow')
-                    reward-=10000
+                    reward-=1000
             
             #reward += new_game_state['step']*10
-
+        #print('reward ', reward)
         self.memory.push(current_obs, torch.as_tensor(current_action),torch.as_tensor(next_obs),torch.FloatTensor([reward]))
 
         optimize_model(self.memory, self.policy_net, self.target_net, self.optimizer)
+        #print(reward)
     self.logger.debug(f'Encountered game event(s) {", ".join(map(repr, events))} in step {new_game_state["step"]}')
     self.transitions.append(Transition(state_to_features(old_game_state), self_action, state_to_features(new_game_state), reward_from_events(self, events)))
 
@@ -229,13 +227,7 @@ def optimize_model(memory, policy_net, target_net, optimizer):
     state_batch = torch.stack(states)
     action_batch = torch.stack(batch.action)
     reward_batch = torch.cat(batch.reward)
-
     state_action_values = policy_net(state_batch.squeeze(1)).gather(1, action_batch.unsqueeze(1))
-    #print('state action')
-    #print(state_action_values.shape)
-    
-    #.gather(1, action_batch)
-
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
     next_state_values[non_final_mask] = target_net(non_final_next_states.squeeze(1)).max(1)[0].detach()
     # Compute the expected Q values
@@ -326,7 +318,7 @@ def reward_from_events(self, events: List[str]) -> int:
     Here you can modify the rewards your agent get so as to en/discourage
     certain behavior.
     """
-    
+    """
     game_rewards = {
         e.COIN_COLLECTED: 1000,
         e.INVALID_ACTION: -500,
@@ -341,11 +333,12 @@ def reward_from_events(self, events: List[str]) -> int:
     }
     """
     game_rewards = {
-        e.KILLED_SELF: -10000,
-        e.BOMB_DROPPED: 10,
-        e.SURVIVED_ROUND: 1000,
+        e.KILLED_SELF: -30000,
+        e.BOMB_DROPPED: 100,
+        #e.SURVIVED_ROUND: 100,
+        e.CRATE_DESTROYED: 100
     }
-    """
+    
     reward_sum = 0
     for event in events:
         if event in game_rewards:
