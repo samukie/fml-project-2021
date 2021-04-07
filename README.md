@@ -6,6 +6,6 @@ Code template: https://github.com/ukoethe/bomberman_rl
 </p> 
 
 See how Agent P collects coins after being trained with Deep Q-Learning: 
-<p align="center">
+<p align="left">
   <img src="bomberman_rl/screenshots/coin_collector.gif"  width="400"/>
  </p>
